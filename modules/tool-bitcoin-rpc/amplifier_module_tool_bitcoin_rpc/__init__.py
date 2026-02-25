@@ -109,6 +109,100 @@ or consolidations."""
         return ToolResult(success=True, output="\n".join(lines))
 
 
+class SplitUtxosTool:
+    """Split wallet funds into discrete UTXOs via Bitcoin Core RPC."""
+
+    def __init__(self, rpc_url: str, rpc_user: str, rpc_password: str):
+        self._rpc_url = rpc_url
+        self._rpc_user = rpc_user
+        self._rpc_password = rpc_password
+
+    @property
+    def name(self) -> str:
+        return "split_utxos"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Split wallet funds into multiple discrete UTXOs of specified amounts. "
+            "Creates a transaction with one or more outputs, each repeating "
+            "`count` times at `amount_sats` satoshis. Useful for pre-funding "
+            "payment channels, preparing coin-selection inputs, or batching."
+        )
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "outputs": {
+                    "type": "array",
+                    "description": "List of output specifications to create.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "amount_sats": {
+                                "type": "integer",
+                                "description": "Amount in satoshis for each UTXO.",
+                            },
+                            "count": {
+                                "type": "integer",
+                                "description": "Number of UTXOs to create at this amount.",
+                            },
+                            "address": {
+                                "type": "string",
+                                "description": (
+                                    "Destination address. If omitted, a new "
+                                    "wallet address is generated automatically."
+                                ),
+                            },
+                        },
+                        "required": ["amount_sats", "count"],
+                    },
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": (
+                        "Name of the Bitcoin Core wallet to use. "
+                        "Leave empty to use the default wallet."
+                    ),
+                },
+            },
+            "required": ["outputs"],
+        }
+
+    async def _rpc_call(
+        self, method: str, params: list[Any] | None = None, wallet: str = ""
+    ) -> Any:
+        """Send a JSON-RPC request to Bitcoin Core and return the result."""
+        url = self._rpc_url
+        if wallet:
+            url = f"{url}/wallet/{wallet}"
+
+        payload = {
+            "jsonrpc": "1.0",
+            "id": f"split_utxos_{method}",
+            "method": method,
+            "params": params or [],
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                json=payload,
+                auth=(self._rpc_user, self._rpc_password),
+                timeout=30.0,
+            )
+
+        data = response.json()
+        if data.get("error"):
+            raise RuntimeError(f"RPC error: {data['error']}")
+        return data["result"]
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        raise NotImplementedError("Coming in Task 3")
+
+
 def _load_credentials(config: dict) -> tuple[str, str]:
     """Resolve RPC credentials from cookie file or explicit env vars."""
     cookie_file = config.get("cookie_file") or os.environ.get("BITCOIN_COOKIE_FILE")
