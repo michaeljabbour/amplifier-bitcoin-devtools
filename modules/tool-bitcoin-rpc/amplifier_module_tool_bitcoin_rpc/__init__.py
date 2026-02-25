@@ -152,13 +152,21 @@ class SplitUtxosTool:
                             "address": {
                                 "type": "string",
                                 "description": (
-                                    "Destination address. If omitted, a new "
-                                    "wallet address is generated automatically."
+                                    "Override address for this specific output group. "
+                                    "Takes precedence over the top-level address."
                                 ),
                             },
                         },
                         "required": ["amount_sats", "count"],
                     },
+                },
+                "address": {
+                    "type": "string",
+                    "description": (
+                        "Destination address for all outputs. If omitted, "
+                        "a single new wallet address is generated. "
+                        "Individual outputs can override this with their own address."
+                    ),
                 },
                 "wallet": {
                     "type": "string",
@@ -202,41 +210,42 @@ class SplitUtxosTool:
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         outputs_spec = input.get("outputs", [])
         wallet = input.get("wallet", "")
+        default_address = input.get("address")
 
         if not outputs_spec:
             return ToolResult(success=False, error={"message": "No outputs specified."})
 
-        # Build the list of (address, btc_amount) pairs
-        address_amounts: list[tuple[str, float]] = []
+        # Resolve the default address: use provided, or generate one
         try:
-            for spec in outputs_spec:
-                amount_sats = spec["amount_sats"]
-                count = spec["count"]
-                address = spec.get("address")
-                btc_amount = amount_sats / 100_000_000
-
-                for _ in range(count):
-                    if address:
-                        addr = address
-                    else:
-                        addr = await self._rpc_call("getnewaddress", wallet=wallet)
-                    address_amounts.append((addr, btc_amount))
+            if not default_address:
+                default_address = await self._rpc_call("getnewaddress", wallet=wallet)
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             return ToolResult(
                 success=False,
-                error={"message": f"Failed generating addresses: {e}"},
+                error={"message": f"Failed generating address: {e}"},
             )
         except RuntimeError as e:
             return ToolResult(success=False, error={"message": str(e)})
 
-        # Build the outputs map for the send RPC
-        outputs_map: dict[str, float] = {}
-        for addr, amount in address_amounts:
-            outputs_map[addr] = round(amount, 8)
+        # Build the list of (address, btc_amount) pairs
+        # Per-output address overrides the default
+        address_amounts: list[tuple[str, float]] = []
+        for spec in outputs_spec:
+            amount_sats = spec["amount_sats"]
+            count = spec["count"]
+            addr = spec.get("address") or default_address
+            btc_amount = amount_sats / 100_000_000
+
+            for _ in range(count):
+                address_amounts.append((addr, btc_amount))
+
+        # Build outputs as a list of single-key dicts so the send RPC
+        # creates separate UTXOs even when multiple go to the same address
+        outputs_list = [{addr: round(amount, 8)} for addr, amount in address_amounts]
 
         # Call send RPC
         try:
-            result = await self._rpc_call("send", params=[outputs_map], wallet=wallet)
+            result = await self._rpc_call("send", params=[outputs_list], wallet=wallet)
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             return ToolResult(
                 success=False,
