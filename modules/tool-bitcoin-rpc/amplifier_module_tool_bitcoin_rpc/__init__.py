@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 import httpx
@@ -75,7 +76,9 @@ or consolidations."""
         except httpx.HTTPStatusError as e:
             return ToolResult(
                 success=False,
-                error={"message": f"RPC HTTP error {e.response.status_code}: {e.response.text}"},
+                error={
+                    "message": f"RPC HTTP error {e.response.status_code}: {e.response.text}"
+                },
             )
         except httpx.RequestError as e:
             return ToolResult(
@@ -106,16 +109,28 @@ or consolidations."""
         return ToolResult(success=True, output="\n".join(lines))
 
 
+def _load_credentials(config: dict) -> tuple[str, str]:
+    """Resolve RPC credentials from cookie file or explicit env vars."""
+    cookie_file = config.get("cookie_file") or os.environ.get("BITCOIN_COOKIE_FILE")
+    if cookie_file:
+        content = open(cookie_file).read().strip()
+        user, password = content.split(":", 1)
+        return user, password
+    return (
+        config.get("rpc_user") or os.environ["BITCOIN_RPC_USER"],
+        config.get("rpc_password") or os.environ["BITCOIN_RPC_PASSWORD"],
+    )
+
+
 async def mount(
     coordinator: ModuleCoordinator,
     config: dict[str, Any] | None = None,
 ) -> None:
     config = config or {}
 
-    host = config.get("rpc_host", "127.0.0.1")
-    port = config.get("rpc_port", 18443)
-    user = config.get("rpc_user", "polaruser")
-    password = config.get("rpc_password", "polaruser")
+    host = config.get("rpc_host") or os.environ.get("BITCOIN_RPC_HOST", "127.0.0.1")
+    port = config.get("rpc_port") or os.environ.get("BITCOIN_RPC_PORT", "8332")
+    user, password = _load_credentials(config)
     rpc_url = f"http://{host}:{port}"
 
     tool = ListUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)

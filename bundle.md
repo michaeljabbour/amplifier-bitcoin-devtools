@@ -12,9 +12,8 @@ tools:
     source: ./modules/tool-bitcoin-rpc
     config:
       rpc_host: 127.0.0.1
-      rpc_port: 18443
-      rpc_user: polaruser
-      rpc_password: polaruser
+      rpc_port: 18445
+      cookie_file: /Users/nlandaverde/.polar/networks/2/volumes/bitcoind/backend1/regtest/.cookie
 ---
 
 # Bitcoin UTXO Manager
