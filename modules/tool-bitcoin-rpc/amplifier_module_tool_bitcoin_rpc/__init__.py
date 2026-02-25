@@ -1,0 +1,123 @@
+import json
+from typing import Any
+
+import httpx
+from amplifier_core import ModuleCoordinator, ToolResult
+
+
+class ListUtxosTool:
+    """List UTXOs from a Bitcoin Core wallet via RPC."""
+
+    def __init__(self, rpc_url: str, rpc_user: str, rpc_password: str):
+        self._rpc_url = rpc_url
+        self._rpc_user = rpc_user
+        self._rpc_password = rpc_password
+
+    @property
+    def name(self) -> str:
+        return "list_utxos"
+
+    @property
+    def description(self) -> str:
+        return """List unspent transaction outputs (UTXOs) from a Bitcoin Core wallet.
+
+Calls the Bitcoin Core RPC `listunspent` method and returns the full UTXO set
+for the specified wallet, including each output's txid, vout index, address,
+amount in BTC, and confirmation count.
+
+Use this to understand what funds are available before planning any UTXO splits
+or consolidations."""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "wallet": {
+                    "type": "string",
+                    "description": (
+                        "Name of the Bitcoin Core wallet to query. "
+                        "Leave empty to use the default wallet."
+                    ),
+                },
+                "min_confirmations": {
+                    "type": "integer",
+                    "description": "Minimum confirmations required. Defaults to 0 (regtest-friendly).",
+                    "default": 0,
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        wallet = input.get("wallet", "")
+        min_conf = input.get("min_confirmations", 0)
+
+        url = self._rpc_url
+        if wallet:
+            url = f"{url}/wallet/{wallet}"
+
+        payload = {
+            "jsonrpc": "1.0",
+            "id": "list_utxos",
+            "method": "listunspent",
+            "params": [min_conf],
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    url,
+                    json=payload,
+                    auth=(self._rpc_user, self._rpc_password),
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"RPC HTTP error {e.response.status_code}: {e.response.text}"},
+            )
+        except httpx.RequestError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"Could not reach Bitcoin node: {e}"},
+            )
+
+        data = response.json()
+        if data.get("error"):
+            return ToolResult(
+                success=False,
+                error={"message": f"RPC error: {data['error']}"},
+            )
+
+        utxos = data.get("result", [])
+        if not utxos:
+            label = f"wallet '{wallet}'" if wallet else "default wallet"
+            return ToolResult(success=True, output=f"No UTXOs found in {label}.")
+
+        total_btc = sum(u["amount"] for u in utxos)
+        lines = [f"Found {len(utxos)} UTXO(s) — {total_btc:.8f} BTC total\n"]
+        for i, u in enumerate(utxos, 1):
+            lines.append(
+                f"{i}. {u['amount']:.8f} BTC  |  {u.get('address', 'unknown')}  |  "
+                f"{u['confirmations']} conf  |  {u['txid']}:{u['vout']}"
+            )
+
+        return ToolResult(success=True, output="\n".join(lines))
+
+
+async def mount(
+    coordinator: ModuleCoordinator,
+    config: dict[str, Any] | None = None,
+) -> None:
+    config = config or {}
+
+    host = config.get("rpc_host", "127.0.0.1")
+    port = config.get("rpc_port", 18443)
+    user = config.get("rpc_user", "polaruser")
+    password = config.get("rpc_password", "polaruser")
+    rpc_url = f"http://{host}:{port}"
+
+    tool = ListUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", tool, name=tool.name)
