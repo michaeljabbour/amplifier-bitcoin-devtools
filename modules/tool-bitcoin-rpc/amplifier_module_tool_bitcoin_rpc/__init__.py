@@ -284,5 +284,8 @@ async def mount(
     user, password = _load_credentials(config)
     rpc_url = f"http://{host}:{port}"
 
-    tool = ListUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
-    await coordinator.mount("tools", tool, name=tool.name)
+    list_tool = ListUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", list_tool, name=list_tool.name)
+
+    split_tool = SplitUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", split_tool, name=split_tool.name)
