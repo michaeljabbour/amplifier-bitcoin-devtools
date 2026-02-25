@@ -200,7 +200,64 @@ class SplitUtxosTool:
         return data["result"]
 
     async def execute(self, input: dict[str, Any]) -> ToolResult:
-        raise NotImplementedError("Coming in Task 3")
+        outputs_spec = input.get("outputs", [])
+        wallet = input.get("wallet", "")
+
+        if not outputs_spec:
+            return ToolResult(success=False, error={"message": "No outputs specified."})
+
+        # Build the list of (address, btc_amount) pairs
+        address_amounts: list[tuple[str, float]] = []
+        try:
+            for spec in outputs_spec:
+                amount_sats = spec["amount_sats"]
+                count = spec["count"]
+                address = spec.get("address")
+                btc_amount = amount_sats / 100_000_000
+
+                for _ in range(count):
+                    if address:
+                        addr = address
+                    else:
+                        addr = await self._rpc_call("getnewaddress", wallet=wallet)
+                    address_amounts.append((addr, btc_amount))
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"Failed generating addresses: {e}"},
+            )
+        except RuntimeError as e:
+            return ToolResult(success=False, error={"message": str(e)})
+
+        # Build the outputs map for the send RPC
+        outputs_map: dict[str, float] = {}
+        for addr, amount in address_amounts:
+            outputs_map[addr] = round(amount, 8)
+
+        # Call send RPC
+        try:
+            result = await self._rpc_call("send", params=[outputs_map], wallet=wallet)
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"Transaction failed: {e}"},
+            )
+        except RuntimeError as e:
+            return ToolResult(success=False, error={"message": str(e)})
+
+        txid = (
+            result.get("txid", str(result)) if isinstance(result, dict) else str(result)
+        )
+
+        # Format output
+        lines = [f"Transaction broadcast: {txid}\n"]
+        lines.append(f"Created {len(address_amounts)} UTXO(s):\n")
+        for i, (addr, btc) in enumerate(address_amounts, 1):
+            sats = int(btc * 100_000_000)
+            lines.append(f"  {i}.  {sats:,} sats  ->  {addr}")
+        lines.append("\nChange returned to wallet automatically.")
+
+        return ToolResult(success=True, output="\n".join(lines))
 
 
 def _load_credentials(config: dict) -> tuple[str, str]:
