@@ -354,6 +354,100 @@ send), remote balance (funds it can receive), and any pending amounts."""
         return ToolResult(success=True, output="\n".join(lines))
 
 
+class PayInvoiceTool:
+    """Pay a BOLT11 Lightning invoice via the LND REST API."""
+
+    def __init__(self, rest_url: str, tls_cert: str, macaroon_hex: str):
+        self._rest_url = rest_url
+        self._tls_cert = tls_cert
+        self._macaroon_hex = macaroon_hex
+
+    @property
+    def name(self) -> str:
+        return "lnd_pay_invoice"
+
+    @property
+    def description(self) -> str:
+        return """Pay a BOLT11 Lightning invoice via the LND node.
+
+Calls POST /v1/channels/transactions (SendPaymentSync). Blocks until the
+payment succeeds or fails, then returns the result.
+
+On success returns the payment preimage (proof of payment) and the fee paid.
+On failure returns the payment error message from LND.
+
+Use `fee_limit_sats` to cap the maximum routing fee (default: 1000 sats).
+Use `timeout_seconds` to override the payment timeout (default: 60 seconds)."""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "payment_request": {
+                    "type": "string",
+                    "description": "The BOLT11 invoice string to pay (starts with lnbc, lntb, etc.).",
+                },
+                "fee_limit_sats": {
+                    "type": "integer",
+                    "description": "Maximum routing fee in satoshis. Defaults to 1000.",
+                },
+                "timeout_seconds": {
+                    "type": "integer",
+                    "description": "Payment timeout in seconds. Defaults to 60.",
+                },
+            },
+            "required": ["payment_request"],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        payment_request = input.get("payment_request", "").strip()
+        if not payment_request:
+            return ToolResult(success=False, error={"message": "'payment_request' is required."})
+
+        fee_limit_sats = int(input.get("fee_limit_sats", 1000))
+        timeout_seconds = int(input.get("timeout_seconds", 60))
+
+        body: dict[str, Any] = {
+            "payment_request": payment_request,
+            "fee_limit": {"fixed": fee_limit_sats},
+        }
+
+        try:
+            async with _make_client(self._rest_url, self._tls_cert, self._macaroon_hex) as client:
+                response = await client.post(
+                    "/v1/channels/transactions",
+                    json=body,
+                    timeout=timeout_seconds + 10.0,
+                )
+                response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            return ToolResult(success=False, error={"message": f"HTTP {e.response.status_code}: {_lnd_error(e.response)}"})
+        except httpx.RequestError as e:
+            return ToolResult(success=False, error={"message": f"Could not reach LND node: {e}"})
+
+        data = response.json()
+        payment_error = data.get("payment_error", "")
+        if payment_error:
+            return ToolResult(success=False, error={"message": f"Payment failed: {payment_error}"})
+
+        preimage = data.get("payment_preimage", "")
+        route = data.get("payment_route", {})
+        total_fees = int(route.get("total_fees", 0))
+        total_amt = int(route.get("total_amt", 0))
+        hop_count = len(route.get("hops", []))
+
+        lines = [
+            "Payment successful.",
+            f"",
+            f"Amount paid: {total_amt:,} sats",
+            f"Routing fee: {total_fees:,} sats",
+            f"Hops:        {hop_count}",
+            f"Preimage:    {preimage}",
+        ]
+        return ToolResult(success=True, output="\n".join(lines))
+
+
 async def mount(
     coordinator: ModuleCoordinator,
     config: dict[str, Any] | None = None,
@@ -386,6 +480,7 @@ async def mount(
         LookupInvoiceTool(rest_url, tls_cert, macaroon_hex),
         NodeInfoTool(rest_url, tls_cert, macaroon_hex),
         ChannelBalanceTool(rest_url, tls_cert, macaroon_hex),
+        PayInvoiceTool(rest_url, tls_cert, macaroon_hex),
     ]
 
     for tool in tools:

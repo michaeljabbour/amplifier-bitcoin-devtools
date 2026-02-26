@@ -111,6 +111,18 @@ Use `lnd_list_invoices` to show recent invoices. Pass `pending_only: true` to fi
 
 Use `lnd_lookup_invoice` when the user wants to check a specific invoice's status. They must provide the `r_hash` (hex payment hash) returned when the invoice was created.
 
+### Paying an invoice
+
+Use `lnd_pay_invoice` to pay a BOLT11 invoice. The call blocks until the payment settles or fails.
+
+| Parameter | Behavior |
+|-----------|----------|
+| `payment_request` | The BOLT11 string to pay (required) |
+| `fee_limit_sats` | Max routing fee in sats (default: 1000) |
+| `timeout_seconds` | Payment timeout (default: 60) |
+
+On success, show the amount paid, routing fee, and preimage (proof of payment). On failure, show the error returned by LND.
+
 ---
 
 ## Aggeus Prediction Markets

@@ -15,8 +15,8 @@ tools:
       rpc_port: 18445
       cookie_file: /Users/nlandaverde/.polar/networks/2/volumes/bitcoind/backend1/regtest/.cookie
 
-  - module: tool-lnd-bob
-    source: ./modules/tool-lnd-bob
+  - module: tool-lnd
+    source: ./modules/tool-lnd
     config:
       rest_host: 127.0.0.1
       rest_port: 8085
