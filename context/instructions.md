@@ -67,6 +67,37 @@ The fee is automatically deducted from the consolidated output (`subtract_fee_fr
 - "merge all small UTXOs" → use `max_amount_sats` with a reasonable threshold; ask the user if unclear
 - "consolidate everything" → omit amount filters entirely
 
+### Generating Addresses
+
+Use `generate_address` to derive a new receive address from a wallet via Bitcoin Core's `getnewaddress` RPC.
+
+| Parameter | Behavior |
+|-----------|----------|
+| `wallet` omitted | Uses the default wallet |
+| `wallet` provided | Generates the address from that specific wallet |
+| `label` omitted | Address is created with no label |
+| `label` provided | Attaches a human-readable label to the address in the wallet |
+| `address_type` omitted | Uses the wallet's configured default type (usually `bech32`) |
+| `address_type` provided | Forces a specific format (see table below) |
+
+**Address types:**
+
+| Type | Format | Prefix |
+|------|--------|--------|
+| `bech32` | Native SegWit | `bc1q...` |
+| `bech32m` | Taproot | `bc1p...` |
+| `p2sh-segwit` | Wrapped SegWit | `3...` |
+| `legacy` | Pay-to-pubkey-hash | `1...` |
+
+Prefer `bech32` (native SegWit) for most purposes. Use `bech32m` when the user explicitly wants a Taproot address. Only use `legacy` or `p2sh-segwit` for compatibility with older software.
+
+**Translating natural language to parameters:**
+- "Give me a receive address for my alice wallet" → `wallet: "alice"`, no `address_type`
+- "Generate a Taproot address" → `address_type: "bech32m"`
+- "Make an address labeled 'mining rewards'" → `label: "mining rewards"`
+
+After a successful call, show the returned address to the user so they can copy it.
+
 ### Mining Blocks (regtest only)
 
 Use `mine_blocks` to generate regtest blocks and direct the coinbase reward to a specific address.
