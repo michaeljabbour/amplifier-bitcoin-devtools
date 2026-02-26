@@ -2,7 +2,7 @@
 bundle:
   name: utxo-bundle
   version: 0.1.0
-  description: Bitcoin UTXO manager — inspect and plan splits for a Bitcoin Core wallet
+  description: Bitcoin UTXO manager — inspect, split, and manage wallets via Bitcoin Core RPC
 
 includes:
   - bundle: git+https://github.com/microsoft/amplifier-foundation@main
