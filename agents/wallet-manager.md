@@ -47,7 +47,7 @@ meta:
     </example>
 
     <example>
-    user: 'Split my balance into 3 UTXOs of 10k sats each'
+    user: 'Split a part of my balance into 3 UTXOs of 10k sats each'
     assistant: 'I'll delegate to wallet-manager to plan and execute the split.'
     <commentary>Split operations require coin selection and output planning.</commentary>
     </example>
