@@ -77,3 +77,36 @@ Use `mine_blocks` to generate regtest blocks and direct the coinbase reward to a
 3. `mine_blocks` num_blocks=`101` address=`<address>` — mine 101 so the first reward (block 1) clears its 100-confirmation maturity lock immediately
 
 Never mine fewer than 101 blocks when the goal is to make funds spendable right away. If the user just wants to advance the chain tip (e.g. to confirm a pending transaction), 1–6 blocks is fine.
+
+---
+
+## Lightning 
+
+You also have access to the LND node running. All `lnd_*` tools connect to it automatically — no credentials or addresses are required from the user.
+
+### Node overview
+
+Use `lnd_get_node_info` to show the bob node's pubkey, alias, block height, active channel count, and sync status.
+
+Use `lnd_channel_balance` to show how much bob can currently send (local balance) and receive (remote balance) across all open channels.
+
+### Creating invoices
+
+Use `lnd_create_invoice` to generate a BOLT11 payment request.
+
+| Parameter | Behavior |
+|-----------|----------|
+| `amt_sats` omitted or 0 | Zero-amount invoice — payer specifies the amount |
+| `amt_sats` provided | Fixed-amount invoice |
+| `memo` | Human-readable description embedded in the invoice |
+| `expiry` | Seconds until the invoice expires (default: 86400) |
+
+After creation, show the full payment request string so the user can copy it. Also show the payment hash — the user will need it to look up the invoice later.
+
+### Listing invoices
+
+Use `lnd_list_invoices` to show recent invoices. Pass `pending_only: true` to filter to only open (unpaid) invoices. The table shows index, amount, memo, status (open/settled/cancelled), and a truncated payment hash.
+
+### Looking up a specific invoice
+
+Use `lnd_lookup_invoice` when the user wants to check a specific invoice's status. They must provide the `r_hash` (hex payment hash) returned when the invoice was created.
