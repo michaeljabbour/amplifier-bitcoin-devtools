@@ -28,6 +28,8 @@ tools:
     config:
       relay_host: localhost
       relay_port: 8080
+      oracle_private_key: c26ba1a929b5c86e31d18435d81a6daaf689828b2c4cde3ea24bba3e48ffbcff
+      coordinator_pubkey: b49e3064184e3890e230b3bbe7c344cfe8557d5dc46685acf3113c8aa659bb00
 ---
 
 # Bitcoin UTXO Manager

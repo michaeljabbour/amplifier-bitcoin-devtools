@@ -1,6 +1,9 @@
 import asyncio
+import hashlib
 import json
 import os
+import secrets
+import time
 import uuid
 from typing import Any
 
@@ -11,6 +14,12 @@ from amplifier_core import ModuleCoordinator, ToolResult
 AGGEUS_MARKET_LISTING_KIND = 46416  # market_definition events
 AGGEUS_SHARE_KIND = 46415           # share announcement events
 
+PROTOCOL_VERSION = 1
+
+
+# ---------------------------------------------------------------------------
+# Nostr wire helpers
+# ---------------------------------------------------------------------------
 
 async def _query_relay(relay_url: str, filters: dict, timeout: float = 10.0) -> list[dict]:
     """Send a REQ to a Nostr relay and collect all matching events until EOSE."""
@@ -21,7 +30,7 @@ async def _query_relay(relay_url: str, filters: dict, timeout: float = 10.0) -> 
         async with websockets.connect(relay_url, open_timeout=5) as ws:
             await ws.send(json.dumps(["REQ", sub_id, filters]))
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             deadline = loop.time() + timeout
 
             while True:
@@ -58,10 +67,103 @@ async def _query_relay(relay_url: str, filters: dict, timeout: float = 10.0) -> 
     return events
 
 
+async def _publish_event(relay_url: str, event: dict, timeout: float = 10.0) -> str:
+    """Publish a signed Nostr event; return a human-readable relay response."""
+    try:
+        async with websockets.connect(relay_url, open_timeout=5) as ws:
+            await ws.send(json.dumps(["EVENT", event]))
+
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + timeout
+
+            while True:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    return "timeout — relay did not acknowledge"
+
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    return "timeout — relay did not acknowledge"
+
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+
+                if not isinstance(msg, list) or len(msg) < 3:
+                    continue
+
+                # ["OK", event_id, accepted, message?]
+                if msg[0] == "OK":
+                    accepted = bool(msg[2])
+                    note = msg[3] if len(msg) > 3 else ""
+                    return "accepted" if accepted else f"rejected: {note}"
+
+    except OSError as exc:
+        raise ConnectionError(f"Cannot connect to relay {relay_url}: {exc}") from exc
+
+    return "no response"
+
+
+# ---------------------------------------------------------------------------
+# Nostr event signing (replicates nostr-tools `finalizeEvent`)
+# ---------------------------------------------------------------------------
+
+def _nostr_event_id(pubkey: str, created_at: int, kind: int, tags: list, content: str) -> str:
+    """SHA256 of the canonical NIP-01 commitment array."""
+    commitment = json.dumps(
+        [0, pubkey, created_at, kind, tags, content],
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(commitment.encode("utf-8")).hexdigest()
+
+
+def _derive_pubkey(privkey_hex: str) -> str:
+    """BIP340 x-only public key (32 bytes) as lowercase hex."""
+    from coincurve import PrivateKey as _SK
+    # format(compressed=True) → [02/03] + 32-byte x; drop the prefix byte
+    return _SK(bytes.fromhex(privkey_hex)).public_key.format(compressed=True)[1:].hex()
+
+
+def _schnorr_sign(privkey_hex: str, event_id_hex: str) -> str:
+    """BIP340 Schnorr signature over the 32-byte event ID, as hex."""
+    from coincurve import PrivateKey as _SK
+    sk = _SK(bytes.fromhex(privkey_hex))
+    return sk.sign_schnorr(bytes.fromhex(event_id_hex)).hex()
+
+
+def _build_signed_event(
+    privkey_hex: str,
+    kind: int,
+    tags: list[list[str]],
+    content: str,
+) -> dict:
+    """Build and sign a complete Nostr event dict (matches nostr-tools finalizeEvent)."""
+    pubkey = _derive_pubkey(privkey_hex)
+    created_at = int(time.time())
+    event_id = _nostr_event_id(pubkey, created_at, kind, tags, content)
+    sig = _schnorr_sign(privkey_hex, event_id)
+    return {
+        "id": event_id,
+        "pubkey": pubkey,
+        "created_at": created_at,
+        "kind": kind,
+        "tags": tags,
+        "content": content,
+        "sig": sig,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Shared parse/display helpers
+# ---------------------------------------------------------------------------
+
 def _parse_market(event: dict) -> dict | None:
     """Parse a kind-46416 event into a structured market dict.
 
-    MarketShareableData is a tuple:
+    MarketShareableData layout (from transactions.ts):
       [version, market_name, market_id, oracle_pubkey, coordinator_pubkey,
        resolution_blockheight, yes_hash, no_hash, relays]
     """
@@ -96,6 +198,10 @@ def _shorten(s: str, head: int = 8, tail: int = 8) -> str:
     return s
 
 
+# ---------------------------------------------------------------------------
+# Query tools
+# ---------------------------------------------------------------------------
+
 class ListMarketsTool:
     """List all Aggeus prediction market listings from the local Nostr relay."""
 
@@ -110,9 +216,8 @@ class ListMarketsTool:
     def description(self) -> str:
         return """List all prediction markets published on the Aggeus Nostr relay.
 
-Queries kind 46416 (market_definition) events from the relay at the configured
-URL (default ws://localhost:8080) and returns a table of all markets with their
-name, shortened market ID, oracle pubkey, and resolution block height.
+Queries kind 46416 (market_definition) events and returns a table of all markets
+with their name, shortened market ID, oracle pubkey, and resolution block height.
 
 Returns an empty result when no markets have been published yet."""
 
@@ -175,9 +280,9 @@ class GetMarketTool:
     def description(self) -> str:
         return """Get full details for a specific Aggeus prediction market by market ID.
 
-Queries kind 46416 events filtered by the market's 'd' tag from the local Nostr
-relay and returns all protocol fields: name, oracle pubkey, coordinator pubkey,
-resolution blockheight, yes/no payment hashes, and the relay list.
+Queries kind 46416 events filtered by the market's 'd' tag and returns all
+protocol fields: name, oracle pubkey, coordinator pubkey, resolution blockheight,
+yes/no payment hashes, and the relay list.
 
 Use aggeus_list_markets first to discover available market IDs."""
 
@@ -260,12 +365,12 @@ class ListSharesTool:
     def description(self) -> str:
         return """List all shares (open positions) available for a specific prediction market.
 
-Queries kind 46415 (share announcement) events linked to the given market ID
-from the local Nostr relay. Returns each share's ID, prediction side (YES/NO),
-maker confidence, deposit amount, and the buyer's cost.
+Queries kind 46415 (share announcement) events linked to the given market ID.
+Returns each share's ID, prediction side (YES/NO), maker confidence, deposit
+amount, and the buyer's cost.
 
 Buyer cost formula: (100 - confidence_percentage) * 100 sats.
-For example, a maker with 70% confidence costs the buyer (100-70)*100 = 3,000 sats.
+Example: a maker at 70% confidence → buyer pays (100-70)*100 = 3,000 sats.
 
 Use aggeus_list_markets to find a market_id first."""
 
@@ -348,27 +453,176 @@ Use aggeus_list_markets to find a market_id first."""
         return ToolResult(success=True, output="\n".join(lines))
 
 
+# ---------------------------------------------------------------------------
+# Market creation tool
+# ---------------------------------------------------------------------------
+
+class CreateMarketTool:
+    """Create and publish a new Aggeus prediction market to the Nostr relay."""
+
+    def __init__(self, relay_url: str, oracle_privkey: str, coordinator_pubkey: str):
+        self._relay_url = relay_url
+        self._oracle_privkey = oracle_privkey
+        self._coordinator_pubkey = coordinator_pubkey
+        # Derive the oracle's x-only pubkey once at init time so we catch bad keys early
+        self._oracle_pubkey = _derive_pubkey(oracle_privkey)
+
+    @property
+    def name(self) -> str:
+        return "aggeus_create_market"
+
+    @property
+    def description(self) -> str:
+        return """Create a new Aggeus prediction market and publish it to the Nostr relay.
+
+Accepts a plain-English yes/no question and a Bitcoin block height at which the
+market resolves. Generates the yes/no preimage hashes, signs a kind-46416
+(market_definition) event with the configured oracle key, and publishes it.
+
+Parse natural language like:
+  "Make a market on whether NVIDIA stock is above $150 before block 900000"
+    → question = "Will NVIDIA stock be above $150 at resolution?"
+      resolution_block = 900000
+
+  "Create a market for bitcoin hitting $100k by block 850000"
+    → question = "Will Bitcoin reach $100,000?"
+      resolution_block = 850000
+
+  "Prediction market: will it rain in NYC before block 200?"
+    → question = "Will it rain in New York City?"
+      resolution_block = 200
+
+The tool prints the market ID and the YES/NO preimages. The preimages are
+secret — store them safely. They are revealed by the oracle at resolution time
+to settle the market (the winning preimage unlocks the Lightning payments)."""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": (
+                        "The market question phrased as a clear yes/no question. "
+                        "E.g. 'Will NVIDIA stock be above $150 at block 900000?'"
+                    ),
+                },
+                "resolution_block": {
+                    "type": "integer",
+                    "description": (
+                        "Bitcoin block height at which the oracle resolves the market. "
+                        "Extract from phrases like 'before block 500', 'by block 900000', etc."
+                    ),
+                },
+            },
+            "required": ["question", "resolution_block"],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        question = input.get("question", "").strip()
+        if not question:
+            return ToolResult(success=False, error={"message": "'question' is required."})
+
+        try:
+            resolution_block = int(input["resolution_block"])
+        except (KeyError, TypeError, ValueError):
+            return ToolResult(success=False, error={"message": "'resolution_block' must be an integer."})
+
+        if resolution_block <= 0:
+            return ToolResult(success=False, error={"message": "'resolution_block' must be a positive integer."})
+
+        # Unique market identifier
+        market_id = uuid.uuid4().hex
+
+        # Generate random preimages; store their SHA256 hashes in the event
+        yes_preimage = secrets.token_bytes(32)
+        no_preimage = secrets.token_bytes(32)
+        yes_hash = hashlib.sha256(yes_preimage).hexdigest()
+        no_hash = hashlib.sha256(no_preimage).hexdigest()
+
+        # Build MarketShareableData (matches transactions.ts type exactly):
+        # [version, market_name, market_id, oracle_pubkey, coordinator_pubkey,
+        #  resolution_blockheight, yes_hash, no_hash, relays]
+        market_data: list = [
+            PROTOCOL_VERSION,
+            question,
+            market_id,
+            self._oracle_pubkey,
+            self._coordinator_pubkey,
+            resolution_block,
+            yes_hash,
+            no_hash,
+            [self._relay_url],
+        ]
+
+        tags = [
+            ["p", self._oracle_pubkey],
+            ["t", "market_definition"],
+            ["d", market_id],
+        ]
+        content = json.dumps(market_data, separators=(",", ":"))
+
+        try:
+            event = _build_signed_event(self._oracle_privkey, AGGEUS_MARKET_LISTING_KIND, tags, content)
+        except Exception as exc:
+            return ToolResult(success=False, error={"message": f"Failed to sign event: {exc}"})
+
+        try:
+            relay_status = await _publish_event(self._relay_url, event)
+        except ConnectionError as exc:
+            return ToolResult(success=False, error={"message": str(exc)})
+        except Exception as exc:
+            return ToolResult(success=False, error={"message": f"Relay publish failed: {exc}"})
+
+        lines = [
+            f"Market created: {question}",
+            f"",
+            f"Market ID:         {market_id}",
+            f"Event ID:          {event['id']}",
+            f"Oracle pubkey:     {self._oracle_pubkey}",
+            f"Resolution block:  {resolution_block:,}",
+            f"Relay:             {self._relay_url}  ({relay_status})",
+            f"",
+            f"SAVE THESE PREIMAGES — reveal the winner's at resolution time:",
+            f"  Yes preimage:  {yes_preimage.hex()}",
+            f"  No preimage:   {no_preimage.hex()}",
+            f"",
+            f"Yes hash (in event):  {yes_hash}",
+            f"No hash (in event):   {no_hash}",
+        ]
+        return ToolResult(success=True, output="\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# Module entry point
+# ---------------------------------------------------------------------------
+
 async def mount(
     coordinator: ModuleCoordinator,
     config: dict[str, Any] | None = None,
 ) -> None:
     config = config or {}
 
-    # Relay URL resolution: explicit url > host+port components > env vars > default
-    relay_url = (
-        config.get("relay_url")
-        or os.environ.get("AGGEUS_RELAY_URL")
-    )
+    # Relay URL: explicit url > host+port > env vars > default
+    relay_url = config.get("relay_url") or os.environ.get("AGGEUS_RELAY_URL")
     if not relay_url:
         host = config.get("relay_host") or os.environ.get("AGGEUS_RELAY_HOST", "localhost")
         port = config.get("relay_port") or os.environ.get("AGGEUS_RELAY_PORT", "8080")
         relay_url = f"ws://{host}:{port}"
 
-    tools = [
+    tools: list = [
         ListMarketsTool(relay_url),
         GetMarketTool(relay_url),
         ListSharesTool(relay_url),
     ]
+
+    # CreateMarketTool requires oracle signing credentials — omit it when not configured
+    oracle_privkey = config.get("oracle_private_key") or os.environ.get("AGGEUS_ORACLE_PRIVKEY")
+    coordinator_pubkey = config.get("coordinator_pubkey") or os.environ.get("AGGEUS_COORDINATOR_PUBKEY")
+
+    if oracle_privkey and coordinator_pubkey:
+        tools.append(CreateMarketTool(relay_url, oracle_privkey, coordinator_pubkey))
 
     for tool in tools:
         await coordinator.mount("tools", tool, name=tool.name)

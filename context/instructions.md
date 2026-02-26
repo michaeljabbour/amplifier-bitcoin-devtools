@@ -110,3 +110,53 @@ Use `lnd_list_invoices` to show recent invoices. Pass `pending_only: true` to fi
 ### Looking up a specific invoice
 
 Use `lnd_lookup_invoice` when the user wants to check a specific invoice's status. They must provide the `r_hash` (hex payment hash) returned when the invoice was created.
+
+---
+
+## Aggeus Prediction Markets
+
+You have access to an Aggeus prediction market node running on a local Nostr relay (`ws://localhost:8080`). All `aggeus_*` tools connect to it automatically.
+
+Aggeus is a Bitcoin-native prediction market protocol built on Nostr and Lightning. Markets are published as Nostr events (kind 46416). Shares are separate events (kind 46415) that represent maker positions — a maker locks sats and publishes a YES or NO prediction with a confidence level. Buyers take the opposite side for a fee derived from that confidence.
+
+### Listing markets
+
+Use `aggeus_list_markets` to show all markets currently published on the relay. Returns a table with the market name, shortened market ID, oracle pubkey, and the Bitcoin block height at which the market resolves.
+
+When the user asks "what markets are there?", "show me open markets", or anything similar — call this tool first.
+
+### Getting market details
+
+Use `aggeus_get_market` for full protocol-level details on a specific market. Requires a `market_id` (get it from `aggeus_list_markets`). Returns:
+- Oracle and coordinator pubkeys
+- Resolution block height
+- Yes/No payment hashes (these are SHA256 hashes of the preimages the oracle reveals at resolution)
+- Relay list
+
+### Listing shares for a market
+
+Use `aggeus_list_shares` to show all open share positions for a specific market. Requires a `market_id`.
+
+The table shows each share's side (YES/NO), maker confidence, deposit size, and the buyer's cost:
+
+```
+Buyer cost = (100 - confidence_percentage) * 100 sats
+```
+
+Example: a maker at 70% confidence → buyer pays 3,000 sats for a 10,000 sat position.
+
+### Creating a market
+
+Use `aggeus_create_market` when the user wants to publish a new prediction market. This tool is only available when oracle credentials are configured.
+
+**Translating natural language to parameters:**
+
+| User says | `question` | `resolution_block` |
+|-----------|------------|-------------------|
+| "Make a market on NVIDIA above $150 before block 900000" | "Will NVIDIA stock be above $150 at resolution?" | 900000 |
+| "Create a bitcoin $100k market, resolves block 850000" | "Will Bitcoin reach $100,000?" | 850000 |
+| "Market: rain in NYC before block 200" | "Will it rain in New York City?" | 200 |
+
+Always phrase `question` as a clear yes/no question. Extract `resolution_block` from any "before block N", "by block N", or "at block N" phrasing.
+
+After creation, the tool returns the market ID, event ID, and YES/NO preimages. **Tell the user to save the preimages immediately** — they are secret values that the oracle reveals at resolution time to settle Lightning payments. They cannot be recovered if lost.
