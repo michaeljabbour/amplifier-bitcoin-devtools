@@ -137,10 +137,11 @@ class SplitUtxosTool:
     @property
     def description(self) -> str:
         return (
-            "Split wallet funds into multiple discrete UTXOs of specified amounts. "
-            "Creates a transaction with one or more outputs, each repeating "
-            "`count` times at `amount_sats` satoshis. Useful for pre-funding "
-            "payment channels, preparing coin-selection inputs, or batching."
+            "Split wallet funds into multiple discrete UTXOs of specified amounts, "
+            "all sent to a single destination address. "
+            "Supply `address` to use a specific destination, or omit it to have "
+            "the wallet generate one automatically. "
+            "Each output group repeats `count` times at `amount_sats` satoshis."
         )
 
     @property
@@ -162,13 +163,6 @@ class SplitUtxosTool:
                                 "type": "integer",
                                 "description": "Number of UTXOs to create at this amount.",
                             },
-                            "address": {
-                                "type": "string",
-                                "description": (
-                                    "Override address for this specific output group. "
-                                    "Takes precedence over the top-level address."
-                                ),
-                            },
                         },
                         "required": ["amount_sats", "count"],
                     },
@@ -176,9 +170,8 @@ class SplitUtxosTool:
                 "address": {
                     "type": "string",
                     "description": (
-                        "Destination address for all outputs. If omitted, "
-                        "a single new wallet address is generated. "
-                        "Individual outputs can override this with their own address."
+                        "Destination address for all outputs. "
+                        "If omitted, a single new wallet address is generated."
                     ),
                 },
                 "wallet": {
@@ -246,11 +239,10 @@ class SplitUtxosTool:
         for spec in outputs_spec:
             amount_sats = spec["amount_sats"]
             count = spec["count"]
-            addr = spec.get("address") or default_address
             btc_amount = amount_sats / 100_000_000
 
             for _ in range(count):
-                address_amounts.append((addr, btc_amount))
+                address_amounts.append((default_address, btc_amount))
 
         # Build outputs as a list of single-key dicts so the send RPC
         # creates separate UTXOs even when multiple go to the same address
@@ -350,7 +342,8 @@ The `wallet` parameter is required for every action except `list`."""
 
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         action = input.get("action")
-        wallet = input.get("wallet", "")
+        # None means "not provided"; "" means "the unnamed default wallet" — keep the distinction.
+        wallet = input.get("wallet")
 
         try:
             if action == "list":
@@ -359,25 +352,33 @@ The `wallet` parameter is required for every action except `list`."""
                 lines = ["Wallets on disk:"]
                 for name in on_disk:
                     tag = " (loaded)" if name in loaded else ""
-                    lines.append(f"  {name or '(default)'}{tag}")
+                    display = f'"{name}"' if name else '"" (unnamed default wallet — pass wallet: "" to reference it)'
+                    lines.append(f"  {display}{tag}")
                 if not on_disk:
                     lines.append("  none")
                 return ToolResult(success=True, output="\n".join(lines))
 
-            if not wallet:
+            if wallet is None:
                 return ToolResult(
                     success=False,
                     error={"message": f"'wallet' is required for action '{action}'."},
                 )
 
+            # create and load need an actual name — "" is not valid.
+            if action in ("create", "load") and not wallet:
+                return ToolResult(
+                    success=False,
+                    error={"message": f"A non-empty wallet name is required for '{action}'."},
+                )
+
             if action == "info":
                 info = await self._rpc("getwalletinfo", wallet=wallet)
                 lines = [
-                    f"Wallet:       {wallet}",
-                    f"Balance:      {info['balance']:.8f} BTC",
+                    f"Wallet:       {wallet or '(unnamed default)'}",
+                    f"Balance:      {info.get('balance', 0):.8f} BTC",
                     f"Unconfirmed:  {info.get('unconfirmed_balance', 0):.8f} BTC",
                     f"Immature:     {info.get('immature_balance', 0):.8f} BTC",
-                    f"Transactions: {info['txcount']}",
+                    f"Transactions: {info.get('txcount', 0)}",
                     f"Keypool size: {info.get('keypoolsize', 'n/a')}",
                     f"Descriptors:  {info.get('descriptors', False)}",
                 ]
