@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import hashlib
 import json
 import os
@@ -8,7 +9,57 @@ import uuid
 from typing import Any
 
 import websockets
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from amplifier_core import ModuleCoordinator, ToolResult
+
+_P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F  # secp256k1 field prime
+
+
+def _lift_x_even(x_hex: str) -> tuple[int, int]:
+    """Return (x, y) for a Nostr x-only pubkey, choosing even y."""
+    x = int(x_hex, 16)
+    y_sq = (pow(x, 3, _P) + 7) % _P
+    y = pow(y_sq, (_P + 1) // 4, _P)
+    if y % 2 != 0:
+        y = _P - y
+    return x, y
+
+
+def _nip04_encrypt(sender_privkey_hex: str, recipient_pubkey_hex: str, plaintext: str) -> str:
+    """NIP-04 encrypt: ECDH shared-x → AES-256-CBC.  Content = base64(ct)?iv=base64(iv)"""
+    backend = default_backend()
+    sender_key = ec.derive_private_key(int(sender_privkey_hex, 16), ec.SECP256K1(), backend)
+    rx, ry = _lift_x_even(recipient_pubkey_hex)
+    recipient_key = ec.EllipticCurvePublicNumbers(rx, ry, ec.SECP256K1()).public_key(backend)
+    shared_x = sender_key.exchange(ec.ECDH(), recipient_key)  # 32-byte x-coord
+
+    iv = os.urandom(16)
+    data = plaintext.encode()
+    pad = 16 - len(data) % 16
+    data += bytes([pad] * pad)
+    enc = Cipher(algorithms.AES(shared_x), modes.CBC(iv), backend=backend).encryptor()
+    ct = enc.update(data) + enc.finalize()
+    return base64.b64encode(ct).decode() + "?iv=" + base64.b64encode(iv).decode()
+
+
+def _nip04_decrypt(recipient_privkey_hex: str, sender_pubkey_hex: str, content: str) -> str:
+    """NIP-04 decrypt."""
+    ct_b64, iv_b64 = content.split("?iv=")
+    ct = base64.b64decode(ct_b64)
+    iv = base64.b64decode(iv_b64)
+
+    backend = default_backend()
+    privkey = ec.derive_private_key(int(recipient_privkey_hex, 16), ec.SECP256K1(), backend)
+    sx, sy = _lift_x_even(sender_pubkey_hex)
+    sender_key = ec.EllipticCurvePublicNumbers(sx, sy, ec.SECP256K1()).public_key(backend)
+    shared_x = privkey.exchange(ec.ECDH(), sender_key)
+
+    dec = Cipher(algorithms.AES(shared_x), modes.CBC(iv), backend=backend).decryptor()
+    data = dec.update(ct) + dec.finalize()
+    pad = data[-1]
+    return data[:-pad].decode()
 
 # Aggeus protocol kinds (from aggeus_prediction_market/packages/shared/src/index.ts)
 AGGEUS_MARKET_LISTING_KIND = 46416  # market_definition events
@@ -595,6 +646,284 @@ to settle the market (the winning preimage unlocks the Lightning payments)."""
 
 
 # ---------------------------------------------------------------------------
+# Offer submission tool
+# ---------------------------------------------------------------------------
+
+class SubmitOfferTool:
+    """Send a liquidity offer to the Aggeus coordinator via NIP-04 encrypted DM."""
+
+    def __init__(self, relay_url: str, maker_privkey: str):
+        self._relay_url = relay_url
+        self._maker_privkey = maker_privkey
+        # Derive maker's x-only pubkey (for signing DMs and subscribing for replies)
+        self._maker_pubkey = _derive_pubkey(maker_privkey)
+
+    @property
+    def name(self) -> str:
+        return "aggeus_submit_offer"
+
+    @property
+    def description(self) -> str:
+        return """Submit a liquidity offer to the Aggeus coordinator for an open market.
+
+Fetches the market listing from the relay, wraps the offer payload in a
+LiquidityOfferRequest, NIP-04 encrypts it to the coordinator's pubkey, and
+sends it as a Kind-4 encrypted DM. Then listens for the coordinator's response.
+
+On acceptance the coordinator returns a Lightning fee invoice to pay.
+On rejection it returns an error message.
+
+The offer payload (funding_tx_hex, to_midstate_sigs, cancel_txs) must be
+constructed by the maker beforehand using their Bitcoin wallet. These encode
+the maker's pre-signed Taproot transactions for the market contract.
+
+Parameters:
+  market_id            - which market to offer on (from aggeus_list_markets)
+  prediction           - "yes" or "no"
+  confidence_percentage - 1–99 (lower = cheaper for buyer, but maker risks more)
+  num_shares           - number of 10,000-sat shares to create
+  funding_tx_hex       - maker's signed funding transaction (hex)
+  to_midstate_sigs     - JSON array of pre-signed midstate tx signatures, one per share
+  cancel_txs           - JSON array of cancel transaction hexes, one per share"""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "market_id": {
+                    "type": "string",
+                    "description": "Market ID to submit the offer for.",
+                },
+                "prediction": {
+                    "type": "string",
+                    "enum": ["yes", "no"],
+                    "description": "Which outcome the maker is predicting.",
+                },
+                "confidence_percentage": {
+                    "type": "integer",
+                    "description": "Maker confidence 1–99. Buyer cost = (100 - confidence) * 100 sats.",
+                },
+                "num_shares": {
+                    "type": "integer",
+                    "description": "Number of 10,000-sat shares to create.",
+                },
+                "funding_tx_hex": {
+                    "type": "string",
+                    "description": "Maker's signed funding transaction hex.",
+                },
+                "to_midstate_sigs": {
+                    "type": "string",
+                    "description": "JSON array of pre-signed midstate signatures, one per share.",
+                },
+                "cancel_txs": {
+                    "type": "string",
+                    "description": "JSON array of cancel transaction hexes, one per share.",
+                },
+            },
+            "required": [
+                "market_id", "prediction", "confidence_percentage",
+                "num_shares", "funding_tx_hex", "to_midstate_sigs", "cancel_txs",
+            ],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        market_id = input.get("market_id", "").strip()
+        prediction = input.get("prediction", "").lower().strip()
+        confidence = input.get("confidence_percentage")
+        num_shares = input.get("num_shares")
+        funding_tx_hex = input.get("funding_tx_hex", "").strip()
+
+        # Parse JSON arrays
+        try:
+            to_midstate_sigs = json.loads(input.get("to_midstate_sigs", "[]"))
+            cancel_txs = json.loads(input.get("cancel_txs", "[]"))
+        except json.JSONDecodeError as exc:
+            return ToolResult(success=False, error={"message": f"Invalid JSON in sigs/cancel_txs: {exc}"})
+
+        if not market_id:
+            return ToolResult(success=False, error={"message": "'market_id' is required."})
+        if prediction not in ("yes", "no"):
+            return ToolResult(success=False, error={"message": "'prediction' must be 'yes' or 'no'."})
+        if confidence is None or not (1 <= int(confidence) <= 99):
+            return ToolResult(success=False, error={"message": "'confidence_percentage' must be 1–99."})
+        if not num_shares or int(num_shares) < 1:
+            return ToolResult(success=False, error={"message": "'num_shares' must be >= 1."})
+
+        # --- Fetch market data from relay ---
+        try:
+            events = await _query_relay(
+                self._relay_url,
+                {"kinds": [AGGEUS_MARKET_LISTING_KIND], "#d": [market_id], "limit": 1},
+            )
+        except ConnectionError as exc:
+            return ToolResult(success=False, error={"message": str(exc)})
+
+        if not events:
+            return ToolResult(success=False, error={"message": f"Market '{market_id}' not found on relay."})
+
+        market = _parse_market(events[0])
+        if market is None:
+            return ToolResult(success=False, error={"message": "Could not parse market data."})
+
+        coordinator_pubkey = market["coordinator_pubkey"]
+
+        # Re-assemble MarketShareableData tuple (same order as transactions.ts)
+        market_data = [
+            market["version"],
+            market["name"],
+            market["market_id"],
+            market["oracle_pubkey"],
+            market["coordinator_pubkey"],
+            market["resolution_blockheight"],
+            market["yes_hash"],
+            market["no_hash"],
+            market["relays"],
+        ]
+
+        # --- Build LiquidityOfferRequest (matches messages.ts) ---
+        request_id = str(uuid.uuid4())
+        offer_payload = {
+            "type": "liquidity/offer",
+            "requestId": request_id,
+            "payload": {
+                "confidencePercentage": int(confidence),
+                "numShares": int(num_shares),
+                "marketMakerPubkey": self._maker_pubkey,
+                "marketData": market_data,
+                "fundingTxHex": funding_tx_hex,
+                "predictingYes": prediction == "yes",
+                "toMidstateSigs": to_midstate_sigs,
+                "cancelTxs": cancel_txs,
+            },
+        }
+
+        # --- NIP-04 encrypt to coordinator ---
+        try:
+            encrypted_content = _nip04_encrypt(
+                self._maker_privkey, coordinator_pubkey, json.dumps(offer_payload)
+            )
+        except Exception as exc:
+            return ToolResult(success=False, error={"message": f"NIP-04 encrypt failed: {exc}"})
+
+        # --- Build and publish Kind-4 DM event ---
+        tags = [["p", coordinator_pubkey]]
+        try:
+            dm_event = _build_signed_event(self._maker_privkey, 4, tags, encrypted_content)
+        except Exception as exc:
+            return ToolResult(success=False, error={"message": f"Failed to sign DM: {exc}"})
+
+        # --- Send and wait for coordinator response ---
+        try:
+            response = await self._send_and_wait(dm_event, coordinator_pubkey, request_id)
+        except ConnectionError as exc:
+            return ToolResult(success=False, error={"message": str(exc)})
+        except Exception as exc:
+            return ToolResult(success=False, error={"message": f"Relay error: {exc}"})
+
+        if response is None:
+            return ToolResult(success=False, error={"message": "Coordinator did not respond within timeout."})
+
+        msg_type = response.get("type", "")
+        if msg_type == "liquidity/offer_accepted":
+            invoice = response.get("payload", {}).get("feeInvoice", "")
+            lines = [
+                f"Offer accepted by coordinator.",
+                f"",
+                f"Market:    {market['name']}",
+                f"Prediction: {prediction.upper()}  |  Confidence: {confidence}%  |  Shares: {num_shares}",
+                f"Buyer cost per share: {(100 - int(confidence)) * 100:,} sats",
+                f"",
+                f"Pay this Lightning invoice to activate the offer:",
+                f"  {invoice}",
+                f"",
+                f"Request ID: {request_id}",
+            ]
+            return ToolResult(success=True, output="\n".join(lines))
+
+        elif msg_type == "liquidity/offer_rejected":
+            error = response.get("payload", {}).get("error", "Unknown rejection reason.")
+            return ToolResult(success=False, error={"message": f"Offer rejected: {error}"})
+
+        else:
+            return ToolResult(
+                success=False,
+                error={"message": f"Unexpected response type from coordinator: {msg_type}"},
+            )
+
+    async def _send_and_wait(
+        self,
+        dm_event: dict,
+        coordinator_pubkey: str,
+        request_id: str,
+        timeout: float = 30.0,
+    ) -> dict | None:
+        """Publish the DM event and listen for the coordinator's encrypted reply."""
+        sub_id = uuid.uuid4().hex[:12]
+
+        try:
+            async with websockets.connect(self._relay_url, open_timeout=5) as ws:
+                # Publish the offer DM
+                await ws.send(json.dumps(["EVENT", dm_event]))
+
+                # Subscribe to DMs addressed to us
+                await ws.send(json.dumps([
+                    "REQ", sub_id,
+                    {
+                        "kinds": [4],
+                        "#p": [self._maker_pubkey],
+                        "since": dm_event["created_at"] - 2,
+                    },
+                ]))
+
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + timeout
+
+                while True:
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        return None
+
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                    except asyncio.TimeoutError:
+                        return None
+
+                    try:
+                        msg = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if not isinstance(msg, list) or len(msg) < 3:
+                        continue
+
+                    if msg[0] != "EVENT" or msg[1] != sub_id:
+                        continue
+
+                    event = msg[2]
+                    sender = event.get("pubkey", "")
+                    if sender != coordinator_pubkey:
+                        continue
+
+                    try:
+                        plaintext = _nip04_decrypt(
+                            self._maker_privkey, coordinator_pubkey, event["content"]
+                        )
+                        response = json.loads(plaintext)
+                    except Exception:
+                        continue
+
+                    # Match by requestId
+                    if response.get("requestId") == request_id:
+                        return response
+
+        except OSError as exc:
+            raise ConnectionError(f"Cannot connect to relay: {exc}") from exc
+
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Module entry point
 # ---------------------------------------------------------------------------
 
@@ -623,6 +952,12 @@ async def mount(
 
     if oracle_privkey and coordinator_pubkey:
         tools.append(CreateMarketTool(relay_url, oracle_privkey, coordinator_pubkey))
+
+    # SubmitOfferTool requires the maker's private key — omit when not configured
+    maker_privkey = config.get("maker_private_key") or os.environ.get("AGGEUS_MAKER_PRIVKEY")
+
+    if maker_privkey:
+        tools.append(SubmitOfferTool(relay_url, maker_privkey))
 
     for tool in tools:
         await coordinator.mount("tools", tool, name=tool.name)

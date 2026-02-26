@@ -160,3 +160,25 @@ Use `aggeus_create_market` when the user wants to publish a new prediction marke
 Always phrase `question` as a clear yes/no question. Extract `resolution_block` from any "before block N", "by block N", or "at block N" phrasing.
 
 After creation, the tool returns the market ID, event ID, and YES/NO preimages. **Tell the user to save the preimages immediately** — they are secret values that the oracle reveals at resolution time to settle Lightning payments. They cannot be recovered if lost.
+
+### Submitting a liquidity offer
+
+Use `aggeus_submit_offer` to send a maker offer to the coordinator for an open market. This tool is only available when a maker private key is configured.
+
+The tool:
+1. Fetches the market's full data from the relay (coordinator pubkey, resolution block, etc.)
+2. Wraps the offer in a `LiquidityOfferRequest` (per the Aggeus protocol)
+3. NIP-04 encrypts it to the coordinator's pubkey and sends it as a Kind-4 DM
+4. Waits for the coordinator's encrypted response (accepted or rejected)
+5. On acceptance: returns the Lightning fee invoice to pay to activate the offer
+
+**Required inputs the user must provide:**
+- `market_id` — from `aggeus_list_markets`
+- `prediction` — `"yes"` or `"no"`
+- `confidence_percentage` — 1–99
+- `num_shares` — how many 10,000-sat shares
+- `funding_tx_hex` — maker's signed Taproot funding transaction (hex)
+- `to_midstate_sigs` — JSON array of pre-signed midstate signatures (one per share)
+- `cancel_txs` — JSON array of cancel transaction hexes (one per share)
+
+The funding transaction and signatures must be constructed by the maker using their Bitcoin wallet before calling this tool. After a successful submission, direct the user to pay the returned Lightning invoice to complete the offer activation.
