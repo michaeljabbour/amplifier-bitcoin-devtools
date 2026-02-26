@@ -407,6 +407,102 @@ The `wallet` parameter is required for every action except `list`."""
             return ToolResult(success=False, error={"message": str(e)})
 
 
+class GenerateAddressTool:
+    """Generate a new Bitcoin address from a wallet via RPC."""
+
+    def __init__(self, rpc_url: str, rpc_user: str, rpc_password: str):
+        self._rpc_url = rpc_url
+        self._rpc_user = rpc_user
+        self._rpc_password = rpc_password
+
+    @property
+    def name(self) -> str:
+        return "generate_address"
+
+    @property
+    def description(self) -> str:
+        return """Generate a new Bitcoin address from a wallet.
+Calls `getnewaddress` on Bitcoin Core. Optionally accepts a label and address type.
+
+Address types:
+- bech32   — native SegWit (bc1q...), default
+- bech32m  — Taproot (bc1p...)
+- p2sh-segwit — wrapped SegWit (3...)
+- legacy   — pay-to-pubkey-hash (1...)"""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string",
+                    "description": "Optional label to attach to the address in the wallet.",
+                },
+                "address_type": {
+                    "type": "string",
+                    "enum": ["bech32", "bech32m", "p2sh-segwit", "legacy"],
+                    "description": "Address format. Defaults to the wallet's configured type.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": "Wallet to generate the address from. Pass \"\" for the default wallet.",
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        label = input.get("label", "")
+        address_type = input.get("address_type", "")
+        wallet = input.get("wallet", "")
+
+        url = self._rpc_url
+        if wallet:
+            url = f"{url}/wallet/{wallet}"
+
+        params: list[Any] = [label]
+        if address_type:
+            params.append(address_type)
+
+        payload = {
+            "jsonrpc": "1.0",
+            "id": "generate_address",
+            "method": "getnewaddress",
+            "params": params,
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    url,
+                    json=payload,
+                    auth=(self._rpc_user, self._rpc_password),
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+            )
+        except httpx.RequestError as e:
+            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+
+        data = response.json()
+        if data.get("error"):
+            return ToolResult(success=False, error={"message": f"RPC error: {data['error']}"})
+
+        address = data["result"]
+        parts = [f"Address: {address}"]
+        if label:
+            parts.append(f"Label:   {label}")
+        if address_type:
+            parts.append(f"Type:    {address_type}")
+
+        return ToolResult(success=True, output="\n".join(parts))
+
+
 def _load_credentials(config: dict) -> tuple[str, str]:
     """Resolve RPC credentials from cookie file or explicit env vars."""
     cookie_file = config.get("cookie_file") or os.environ.get("BITCOIN_COOKIE_FILE")
@@ -439,3 +535,6 @@ async def mount(
 
     wallet_tool = ManageWalletTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
     await coordinator.mount("tools", wallet_tool, name=wallet_tool.name)
+
+    address_tool = GenerateAddressTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", address_tool, name=address_tool.name)
