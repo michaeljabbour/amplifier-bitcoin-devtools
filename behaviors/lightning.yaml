@@ -1,0 +1,19 @@
+bundle:
+  name: utxo-bundle-lightning
+  version: 0.1.0
+  description: >
+    LND Lightning Network tools — invoices, payments, channel balances,
+    and node info via the LND REST API.
+
+tools:
+  - module: tool-lnd
+    source: ../modules/tool-lnd
+    # Config resolved from env: LND_REST_HOST, LND_REST_PORT, LND_TLS_CERT, LND_MACAROON_PATH
+
+agents:
+  include:
+    - utxo-bundle:lightning-specialist
+
+context:
+  include:
+    - utxo-bundle:context/instructions.md

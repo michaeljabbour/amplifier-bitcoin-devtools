@@ -1,0 +1,20 @@
+bundle:
+  name: utxo-bundle-aggeus
+  version: 0.1.0
+  description: >
+    Aggeus prediction market tools — browse, inspect, and create
+    Bitcoin-native prediction markets on a local Nostr relay.
+
+tools:
+  - module: tool-aggeus-markets
+    source: ../modules/tool-aggeus-markets
+    # Config resolved from env: AGGEUS_RELAY_URL (or AGGEUS_RELAY_HOST / AGGEUS_RELAY_PORT),
+    # AGGEUS_COORDINATOR_PUBKEY, AGGEUS_ORACLE_PRIVKEY
+
+agents:
+  include:
+    - utxo-bundle:market-maker
+
+context:
+  include:
+    - utxo-bundle:context/aggeus-protocol.md

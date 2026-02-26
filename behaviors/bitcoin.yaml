@@ -1,0 +1,20 @@
+bundle:
+  name: utxo-bundle-bitcoin
+  version: 0.1.0
+  description: >
+    Bitcoin Core L1 tools — wallet management, UTXO operations, address
+    generation, sending funds, and regtest mining.
+
+tools:
+  - module: tool-bitcoin-rpc
+    source: ../modules/tool-bitcoin-rpc
+    # Config resolved from env: BITCOIN_COOKIE_FILE (or BITCOIN_RPC_USER / BITCOIN_RPC_PASSWORD),
+    # BITCOIN_RPC_HOST, BITCOIN_RPC_PORT
+
+agents:
+  include:
+    - utxo-bundle:wallet-manager
+
+context:
+  include:
+    - utxo-bundle:context/instructions.md

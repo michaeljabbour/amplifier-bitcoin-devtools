@@ -8,7 +8,9 @@ bundle:
 
 includes:
   - bundle: git+https://github.com/microsoft/amplifier-foundation@main
-  - bundle: utxo-bundle:behaviors/utxo-bundle
+  - bundle: utxo-bundle:behaviors/bitcoin
+  - bundle: utxo-bundle:behaviors/lightning
+  - bundle: utxo-bundle:behaviors/aggeus
 ---
 
 # Bitcoin + Lightning + Aggeus Assistant
