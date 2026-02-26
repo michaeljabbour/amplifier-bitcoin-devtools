@@ -22,6 +22,12 @@ tools:
       rest_port: 8085
       tls_cert: /Users/nlandaverde/.polar/networks/2/volumes/lnd/bob/tls.cert
       macaroon_path: /Users/nlandaverde/.polar/networks/2/volumes/lnd/bob/data/chain/bitcoin/regtest/admin.macaroon
+
+  - module: tool-aggeus-markets
+    source: ./modules/tool-aggeus-markets
+    config:
+      relay_host: localhost
+      relay_port: 8080
 ---
 
 # Bitcoin UTXO Manager
