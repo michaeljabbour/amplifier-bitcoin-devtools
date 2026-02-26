@@ -1,0 +1,32 @@
+bundle:
+  name: utxo-bundle-behavior
+  version: 0.1.0
+  description: >
+    Bitcoin Core wallet management, Lightning Network, and Aggeus prediction
+    markets — tools, agents, and context for a local development stack.
+
+tools:
+  - module: tool-bitcoin-rpc
+    source: ../modules/tool-bitcoin-rpc
+    # Config resolved from env: BITCOIN_COOKIE_FILE (or BITCOIN_RPC_USER / BITCOIN_RPC_PASSWORD),
+    # BITCOIN_RPC_HOST, BITCOIN_RPC_PORT
+
+  - module: tool-lnd
+    source: ../modules/tool-lnd
+    # Config resolved from env: LND_REST_HOST, LND_REST_PORT, LND_TLS_CERT, LND_MACAROON_PATH
+
+  - module: tool-aggeus-markets
+    source: ../modules/tool-aggeus-markets
+    # Config resolved from env: AGGEUS_RELAY_URL (or AGGEUS_RELAY_HOST / AGGEUS_RELAY_PORT),
+    # AGGEUS_COORDINATOR_PUBKEY, AGGEUS_ORACLE_PRIVKEY
+
+agents:
+  include:
+    - utxo-bundle:wallet-manager
+    - utxo-bundle:lightning-specialist
+    - utxo-bundle:market-maker
+
+context:
+  include:
+    - utxo-bundle:context/instructions.md
+    - utxo-bundle:context/aggeus-protocol.md
