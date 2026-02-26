@@ -780,10 +780,6 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
             total_sats = int(round(total_btc * 100_000_000))
             inputs = [{"txid": u["txid"], "vout": u["vout"]} for u in selected]
 
-            # Use sendall: designed for sweeping — no change output, fee deducted
-            # from recipients automatically. Avoids the duplicate-address error
-            # that send+subtract_fee_from_outputs can trigger.
-            # sendall param order: recipients, conf_target, estimate_mode, fee_rate, options
             result = await self._rpc("sendall", [
                 [address],
                 None,   # conf_target
