@@ -282,6 +282,130 @@ class SplitUtxosTool:
         return ToolResult(success=True, output="\n".join(lines))
 
 
+class ManageWalletTool:
+    """Create, load, unload, and inspect Bitcoin Core wallets via RPC."""
+
+    def __init__(self, rpc_url: str, rpc_user: str, rpc_password: str):
+        self._rpc_url = rpc_url
+        self._rpc_user = rpc_user
+        self._rpc_password = rpc_password
+
+    @property
+    def name(self) -> str:
+        return "manage_wallet"
+
+    @property
+    def description(self) -> str:
+        return """Create, load, unload, and inspect Bitcoin Core wallets.
+
+Actions:
+- list:   Show all wallets on disk and which are currently loaded.
+- info:   Balance, tx count, and status for a specific wallet.
+- create: Create a new descriptor wallet.
+- load:   Load an existing wallet from disk into the node.
+- unload: Unload a wallet from the node (keeps it on disk).
+
+The `wallet` parameter is required for every action except `list`."""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "info", "create", "load", "unload"],
+                    "description": "Wallet operation to perform.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": "Wallet name. Required for all actions except list.",
+                },
+            },
+            "required": ["action"],
+        }
+
+    async def _rpc(self, method: str, params: list = None, wallet: str = "") -> Any:
+        url = self._rpc_url
+        if wallet:
+            url = f"{url}/wallet/{wallet}"
+        payload = {
+            "jsonrpc": "1.0",
+            "id": f"manage_wallet_{method}",
+            "method": method,
+            "params": params or [],
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                json=payload,
+                auth=(self._rpc_user, self._rpc_password),
+                timeout=15.0,
+            )
+            response.raise_for_status()
+        data = response.json()
+        if data.get("error"):
+            raise RuntimeError(f"RPC error: {data['error']}")
+        return data["result"]
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        action = input.get("action")
+        wallet = input.get("wallet", "")
+
+        try:
+            if action == "list":
+                loaded = await self._rpc("listwallets")
+                on_disk = [w["name"] for w in (await self._rpc("listwalletdir"))["wallets"]]
+                lines = ["Wallets on disk:"]
+                for name in on_disk:
+                    tag = " (loaded)" if name in loaded else ""
+                    lines.append(f"  {name or '(default)'}{tag}")
+                if not on_disk:
+                    lines.append("  none")
+                return ToolResult(success=True, output="\n".join(lines))
+
+            if not wallet:
+                return ToolResult(
+                    success=False,
+                    error={"message": f"'wallet' is required for action '{action}'."},
+                )
+
+            if action == "info":
+                info = await self._rpc("getwalletinfo", wallet=wallet)
+                lines = [
+                    f"Wallet:       {wallet}",
+                    f"Balance:      {info['balance']:.8f} BTC",
+                    f"Unconfirmed:  {info.get('unconfirmed_balance', 0):.8f} BTC",
+                    f"Immature:     {info.get('immature_balance', 0):.8f} BTC",
+                    f"Transactions: {info['txcount']}",
+                    f"Keypool size: {info.get('keypoolsize', 'n/a')}",
+                    f"Descriptors:  {info.get('descriptors', False)}",
+                ]
+                return ToolResult(success=True, output="\n".join(lines))
+
+            if action == "create":
+                result = await self._rpc("createwallet", params=[wallet])
+                return ToolResult(success=True, output=f"Created wallet '{result['name']}'.")
+
+            if action == "load":
+                result = await self._rpc("loadwallet", params=[wallet])
+                return ToolResult(success=True, output=f"Loaded wallet '{result['name']}'.")
+
+            if action == "unload":
+                await self._rpc("unloadwallet", params=[wallet])
+                return ToolResult(success=True, output=f"Unloaded wallet '{wallet}'.")
+
+        except httpx.HTTPStatusError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+            )
+        except httpx.RequestError as e:
+            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+        except RuntimeError as e:
+            return ToolResult(success=False, error={"message": str(e)})
+
+
 def _load_credentials(config: dict) -> tuple[str, str]:
     """Resolve RPC credentials from cookie file or explicit env vars."""
     cookie_file = config.get("cookie_file") or os.environ.get("BITCOIN_COOKIE_FILE")
@@ -311,3 +435,6 @@ async def mount(
 
     split_tool = SplitUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
     await coordinator.mount("tools", split_tool, name=split_tool.name)
+
+    wallet_tool = ManageWalletTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", wallet_tool, name=wallet_tool.name)

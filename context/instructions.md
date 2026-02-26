@@ -31,3 +31,17 @@ When the user says something like "Generate 6 UTXOs: 2 at 2k sats, 2 at 4k sats,
 If the user provides external addresses, include them in the output spec. Otherwise, a single new wallet address is generated and reused across all outputs.
 
 After a successful split, report the transaction ID and the list of created UTXOs with their addresses. Remind the user that the transaction needs to be confirmed (mined) before the new UTXOs are spendable.
+
+### Managing Wallets
+
+Use `manage_wallet` for wallet lifecycle operations.
+
+| Action   | When to use |
+|----------|-------------|
+| `list`   | User asks what wallets exist or which are active |
+| `info`   | User asks about a wallet's balance or status |
+| `create` | User wants a new wallet |
+| `load`   | User wants to activate a wallet that's on disk but not loaded |
+| `unload` | User wants to deactivate a wallet without deleting it |
+
+When the user refers to "my wallet" without specifying a name, use `list` first to show what's available before acting. All other tools accept a `wallet` parameter — pass the wallet name through when the user is working in a specific wallet context.
