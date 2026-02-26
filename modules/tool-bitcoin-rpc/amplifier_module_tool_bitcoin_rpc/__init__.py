@@ -99,11 +99,24 @@ or consolidations."""
             return ToolResult(success=True, output=f"No UTXOs found in {label}.")
 
         total_btc = sum(u["amount"] for u in utxos)
-        lines = [f"Found {len(utxos)} UTXO(s) — {total_btc:.8f} BTC total\n"]
+        total_sats = int(round(total_btc * 100_000_000))
+
+        # Sort by address so UTXOs for the same address are grouped together
+        utxos.sort(key=lambda u: u.get("address", ""))
+
+        lines = [
+            f"Found {len(utxos)} UTXO(s) — {total_sats:,} sats ({total_btc:.8f} BTC) total\n"
+        ]
+        lines.append("| # | Address | Sats | BTC | Confs | Outpoint |")
+        lines.append("|--:|---------|-----:|----:|------:|----------|")
         for i, u in enumerate(utxos, 1):
+            sats = int(round(u["amount"] * 100_000_000))
+            addr = u.get("address", "unknown")
+            txid = u["txid"]
+            outpoint = f"{txid[:8]}..{txid[-4:]}:{u['vout']}"
             lines.append(
-                f"{i}. {u['amount']:.8f} BTC  |  {u.get('address', 'unknown')}  |  "
-                f"{u['confirmations']} conf  |  {u['txid']}:{u['vout']}"
+                f"| {i} | {addr} | {sats:,} | {u['amount']:.8f} | "
+                f"{u['confirmations']} | {outpoint} |"
             )
 
         return ToolResult(success=True, output="\n".join(lines))
