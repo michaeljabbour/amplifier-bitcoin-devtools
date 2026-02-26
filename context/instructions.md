@@ -46,6 +46,27 @@ Use `manage_wallet` for wallet lifecycle operations.
 
 When the user refers to "my wallet" without specifying a name, use `list` first to show what's available before acting. All other tools accept a `wallet` parameter — pass the wallet name through when the user is working in a specific wallet context.
 
+### Consolidating UTXOs
+
+Use `consolidate_utxos` to sweep multiple UTXOs into a single output.
+
+| Parameter | Behavior |
+|-----------|----------|
+| `address` omitted | A new wallet address is generated automatically |
+| `outpoints` omitted | All UTXOs meeting the other filters are included |
+| `outpoints` provided | Only those specific UTXOs are consolidated |
+| `max_amount_sats` | Only include UTXOs at or below this size |
+| `min_amount_sats` | Only include UTXOs at or above this size |
+
+`min_confirmations` defaults to 1 — unconfirmed UTXOs are excluded by default. On regtest, pass `0` to include mempool outputs.
+
+The fee is automatically deducted from the consolidated output (`subtract_fee_from_outputs`), so no change output is created.
+
+**Translating natural language to parameters:**
+- "consolidate all UTXOs under 1000 sats" → `max_amount_sats: 1000`
+- "merge all small UTXOs" → use `max_amount_sats` with a reasonable threshold; ask the user if unclear
+- "consolidate everything" → omit amount filters entirely
+
 ### Mining Blocks (regtest only)
 
 Use `mine_blocks` to generate regtest blocks and direct the coinbase reward to a specific address.

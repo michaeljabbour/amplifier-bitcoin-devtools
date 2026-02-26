@@ -244,13 +244,45 @@ class SplitUtxosTool:
             for _ in range(count):
                 address_amounts.append((default_address, btc_amount))
 
-        # Build outputs as a list of single-key dicts so the send RPC
-        # creates separate UTXOs even when multiple go to the same address
+        # Build outputs as a list of single-key dicts.
+        # NOTE: we cannot use the `send` RPC here because Bitcoin Core rejects
+        # any outputs list that references the same address more than once
+        # (error -8: "Invalid parameter, duplicated address"), even when each
+        # entry is its own dict element in the array.
+        #
+        # The raw-transaction pipeline does not have this restriction:
+        #   createrawtransaction → fundrawtransaction →
+        #   signrawtransactionwithwallet → sendrawtransaction
         outputs_list = [{addr: round(amount, 8)} for addr, amount in address_amounts]
 
-        # Call send RPC
         try:
-            result = await self._rpc_call("send", params=[outputs_list], wallet=wallet)
+            # 1. Build the skeleton transaction (no inputs yet, outputs only).
+            raw_hex = await self._rpc_call(
+                "createrawtransaction",
+                params=[[], outputs_list],
+                wallet=wallet,
+            )
+
+            # 2. Let the wallet choose inputs and add a change output.
+            funded = await self._rpc_call(
+                "fundrawtransaction",
+                params=[raw_hex],
+                wallet=wallet,
+            )
+
+            # 3. Sign with wallet keys.
+            signed = await self._rpc_call(
+                "signrawtransactionwithwallet",
+                params=[funded["hex"]],
+                wallet=wallet,
+            )
+
+            # 4. Broadcast.
+            result = await self._rpc_call(
+                "sendrawtransaction",
+                params=[signed["hex"]],
+                wallet=wallet,
+            )
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             return ToolResult(
                 success=False,
@@ -259,9 +291,7 @@ class SplitUtxosTool:
         except RuntimeError as e:
             return ToolResult(success=False, error={"message": str(e)})
 
-        txid = (
-            result.get("txid", str(result)) if isinstance(result, dict) else str(result)
-        )
+        txid = result if isinstance(result, str) else result.get("txid", str(result))
 
         # Format output
         lines = [f"Transaction broadcast: {txid}\n"]
@@ -608,6 +638,184 @@ rather than on top."""
         return ToolResult(success=True, output="\n".join(lines))
 
 
+class ConsolidateUtxosTool:
+    """Consolidate multiple UTXOs into a single output via Bitcoin Core RPC."""
+
+    def __init__(self, rpc_url: str, rpc_user: str, rpc_password: str):
+        self._rpc_url = rpc_url
+        self._rpc_user = rpc_user
+        self._rpc_password = rpc_password
+
+    @property
+    def name(self) -> str:
+        return "consolidate_utxos"
+
+    @property
+    def description(self) -> str:
+        return """Consolidate multiple UTXOs into a single output.
+
+Fetches UTXOs from the wallet (optionally filtered by minimum confirmations or a
+specific set of outpoints), then sweeps them into one output. If no address is
+supplied, a new wallet address is generated automatically.
+
+The network fee is subtracted from the consolidated output amount automatically.
+
+Pass `outpoints` as an array of "txid:vout" strings to consolidate only specific
+UTXOs. Omit it to consolidate everything eligible in the wallet."""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "wallet": {
+                    "type": "string",
+                    "description": 'Wallet to consolidate. Pass "" for the default wallet.',
+                },
+                "address": {
+                    "type": "string",
+                    "description": "Destination address for the consolidated output. Omit to generate a new wallet address.",
+                },
+                "min_confirmations": {
+                    "type": "integer",
+                    "description": "Only include UTXOs with at least this many confirmations. Defaults to 1.",
+                    "default": 1,
+                },
+                "max_amount_sats": {
+                    "type": "integer",
+                    "description": "Only consolidate UTXOs with an amount at or below this value in satoshis. E.g. pass 1000 to consolidate all UTXOs under 1000 sats.",
+                },
+                "min_amount_sats": {
+                    "type": "integer",
+                    "description": "Only consolidate UTXOs with an amount at or above this value in satoshis.",
+                },
+                "outpoints": {
+                    "type": "array",
+                    "description": 'Specific UTXOs to consolidate, as "txid:vout" strings. Omit to use all eligible UTXOs.',
+                    "items": {"type": "string"},
+                },
+            },
+            "required": [],
+        }
+
+    async def _rpc(self, method: str, params: list = None, url: str = None) -> Any:
+        payload = {
+            "jsonrpc": "1.0",
+            "id": f"consolidate_{method}",
+            "method": method,
+            "params": params or [],
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url or self._wallet_url,
+                json=payload,
+                auth=(self._rpc_user, self._rpc_password),
+                timeout=30.0,
+            )
+            response.raise_for_status()
+        data = response.json()
+        if data.get("error"):
+            raise RuntimeError(f"RPC error: {data['error']}")
+        return data["result"]
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        wallet = input.get("wallet", "")
+        address = input.get("address")
+        min_conf = input.get("min_confirmations", 1)
+        outpoints = input.get("outpoints")  # list of "txid:vout" strings
+        max_amount_sats = input.get("max_amount_sats")
+        min_amount_sats = input.get("min_amount_sats")
+
+        self._wallet_url = f"{self._rpc_url}/wallet/{wallet}" if wallet else self._rpc_url
+
+        try:
+            # Fetch eligible UTXOs
+            all_utxos = await self._rpc("listunspent", [min_conf])
+
+            if not all_utxos:
+                label = f"wallet '{wallet}'" if wallet else "default wallet"
+                return ToolResult(
+                    success=False,
+                    error={"message": f"No UTXOs with {min_conf}+ confirmations found in {label}."},
+                )
+
+            # Filter to specific outpoints if requested
+            if outpoints:
+                parsed: set[tuple[str, int]] = set()
+                for op in outpoints:
+                    parts = op.rsplit(":", 1)
+                    if len(parts) != 2 or not parts[1].isdigit():
+                        return ToolResult(
+                            success=False,
+                            error={"message": f"Invalid outpoint '{op}'. Expected format: 'txid:vout'."},
+                        )
+                    parsed.add((parts[0], int(parts[1])))
+
+                selected = [u for u in all_utxos if (u["txid"], u["vout"]) in parsed]
+                if not selected:
+                    return ToolResult(
+                        success=False,
+                        error={"message": "None of the specified outpoints were found in the eligible UTXO set."},
+                    )
+            else:
+                selected = all_utxos
+
+            # Apply amount filters
+            if max_amount_sats is not None:
+                selected = [u for u in selected if int(round(u["amount"] * 100_000_000)) <= max_amount_sats]
+            if min_amount_sats is not None:
+                selected = [u for u in selected if int(round(u["amount"] * 100_000_000)) >= min_amount_sats]
+
+            if not selected:
+                return ToolResult(
+                    success=False,
+                    error={"message": "No UTXOs matched the specified filters."},
+                )
+
+            # Resolve destination address
+            if not address:
+                address = await self._rpc("getnewaddress")
+
+            total_btc = sum(u["amount"] for u in selected)
+            total_sats = int(round(total_btc * 100_000_000))
+            inputs = [{"txid": u["txid"], "vout": u["vout"]} for u in selected]
+
+            # Use sendall: designed for sweeping — no change output, fee deducted
+            # from recipients automatically. Avoids the duplicate-address error
+            # that send+subtract_fee_from_outputs can trigger.
+            # sendall param order: recipients, conf_target, estimate_mode, fee_rate, options
+            result = await self._rpc("sendall", [
+                [address],
+                None,   # conf_target
+                None,   # estimate_mode
+                None,   # fee_rate
+                {"inputs": inputs},
+            ])
+
+            txid = result.get("txid", str(result)) if isinstance(result, dict) else str(result)
+
+            lines = [
+                f"Consolidated {len(selected)} UTXO(s) → {address}",
+                f"Input total:  {total_sats:,} sats",
+                f"txid:         {txid}",
+                "\nFee deducted from output automatically. Run list_utxos after confirmation to see the final amount.",
+            ]
+            if len(selected) == 1:
+                lines.append("\nNote: Only 1 UTXO was selected — this just moves funds to a new address.")
+
+            return ToolResult(success=True, output="\n".join(lines))
+
+        except httpx.HTTPStatusError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+            )
+        except httpx.RequestError as e:
+            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+        except RuntimeError as e:
+            return ToolResult(success=False, error={"message": str(e)})
+
+
 class MineBlocksTool:
     """Mine regtest blocks to a specific address via Bitcoin Core RPC."""
 
@@ -741,6 +949,9 @@ async def mount(
 
     send_tool = SendCoinsTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
     await coordinator.mount("tools", send_tool, name=send_tool.name)
+
+    consolidate_tool = ConsolidateUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", consolidate_tool, name=consolidate_tool.name)
 
     mine_tool = MineBlocksTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
     await coordinator.mount("tools", mine_tool, name=mine_tool.name)
