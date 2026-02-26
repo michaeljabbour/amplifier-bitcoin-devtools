@@ -503,6 +503,206 @@ Address types:
         return ToolResult(success=True, output="\n".join(parts))
 
 
+class SendCoinsTool:
+    """Send bitcoin to an address via Bitcoin Core RPC."""
+
+    def __init__(self, rpc_url: str, rpc_user: str, rpc_password: str):
+        self._rpc_url = rpc_url
+        self._rpc_user = rpc_user
+        self._rpc_password = rpc_password
+
+    @property
+    def name(self) -> str:
+        return "send_coins"
+
+    @property
+    def description(self) -> str:
+        return """Send bitcoin to a given address using `sendtoaddress`.
+
+The wallet selects inputs automatically and handles change.
+Amount is specified in satoshis. Set `subtract_fee_from_amount` to true
+to make the recipient receive exactly `amount_sats` with the fee taken from it,
+rather than on top."""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "description": "Destination Bitcoin address.",
+                },
+                "amount_sats": {
+                    "type": "integer",
+                    "description": "Amount to send in satoshis.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": 'Wallet to send from. Pass "" for the default wallet.',
+                },
+                "comment": {
+                    "type": "string",
+                    "description": "Optional memo stored locally in the wallet (not on-chain).",
+                },
+                "subtract_fee_from_amount": {
+                    "type": "boolean",
+                    "description": "If true, fee is deducted from the sent amount so the recipient gets exactly amount_sats minus fee. Defaults to false.",
+                },
+            },
+            "required": ["address", "amount_sats"],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        address = input.get("address", "")
+        amount_sats = input.get("amount_sats")
+        wallet = input.get("wallet", "")
+        comment = input.get("comment", "")
+        subtract_fee = input.get("subtract_fee_from_amount", False)
+
+        if not address:
+            return ToolResult(success=False, error={"message": "'address' is required."})
+        if amount_sats is None:
+            return ToolResult(success=False, error={"message": "'amount_sats' is required."})
+
+        btc_amount = round(amount_sats / 100_000_000, 8)
+        url = f"{self._rpc_url}/wallet/{wallet}" if wallet else self._rpc_url
+
+        # sendtoaddress params: address, amount, comment, comment_to, subtractfeefromamount
+        payload = {
+            "jsonrpc": "1.0",
+            "id": "send_coins",
+            "method": "sendtoaddress",
+            "params": [address, btc_amount, comment, "", subtract_fee],
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    url,
+                    json=payload,
+                    auth=(self._rpc_user, self._rpc_password),
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+            )
+        except httpx.RequestError as e:
+            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+
+        data = response.json()
+        if data.get("error"):
+            return ToolResult(success=False, error={"message": f"RPC error: {data['error']}"})
+
+        txid = data["result"]
+        lines = [
+            f"Sent {amount_sats:,} sats to {address}",
+            f"txid: {txid}",
+        ]
+        if comment:
+            lines.append(f"Memo: {comment}")
+
+        return ToolResult(success=True, output="\n".join(lines))
+
+
+class MineBlocksTool:
+    """Mine regtest blocks to a specific address via Bitcoin Core RPC."""
+
+    def __init__(self, rpc_url: str, rpc_user: str, rpc_password: str):
+        self._rpc_url = rpc_url
+        self._rpc_user = rpc_user
+        self._rpc_password = rpc_password
+
+    @property
+    def name(self) -> str:
+        return "mine_blocks"
+
+    @property
+    def description(self) -> str:
+        return """Mine regtest blocks, directing the coinbase reward to a specific address.
+
+Wraps `generatetoaddress`. Only works on regtest/signet — not mainnet.
+
+Use this to fund a wallet: generate an address from the target wallet, then mine
+blocks to it. Note that coinbase outputs require 100 confirmations before they
+appear in the wallet's spendable balance — mine at least 101 blocks to make the
+first reward immediately spendable."""
+
+    @property
+    def input_schema(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "num_blocks": {
+                    "type": "integer",
+                    "description": "Number of blocks to mine. Mine 101+ to make coinbase spendable immediately.",
+                },
+                "address": {
+                    "type": "string",
+                    "description": "Address to send the coinbase reward to. Generate one with generate_address first.",
+                },
+            },
+            "required": ["num_blocks", "address"],
+        }
+
+    async def execute(self, input: dict[str, Any]) -> ToolResult:
+        num_blocks = input.get("num_blocks")
+        address = input.get("address", "")
+
+        if not address:
+            return ToolResult(success=False, error={"message": "'address' is required."})
+        if not num_blocks or num_blocks < 1:
+            return ToolResult(success=False, error={"message": "'num_blocks' must be a positive integer."})
+
+        payload = {
+            "jsonrpc": "1.0",
+            "id": "mine_blocks",
+            "method": "generatetoaddress",
+            "params": [num_blocks, address],
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self._rpc_url,
+                    json=payload,
+                    auth=(self._rpc_user, self._rpc_password),
+                    timeout=60.0,
+                )
+                response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+            )
+        except httpx.RequestError as e:
+            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+
+        data = response.json()
+        if data.get("error"):
+            return ToolResult(success=False, error={"message": f"RPC error: {data['error']}"})
+
+        block_hashes = data["result"]
+        reward_sats = num_blocks * 5_000_000_000  # 50 BTC per block on regtest
+        lines = [
+            f"Mined {num_blocks} block(s) → {address}",
+            f"Coinbase reward: {reward_sats:,} sats ({num_blocks * 50} BTC immature)",
+            f"First block: {block_hashes[0]}",
+        ]
+        if len(block_hashes) > 1:
+            lines.append(f"Last block:  {block_hashes[-1]}")
+        if num_blocks < 101:
+            lines.append(
+                f"\nNote: coinbase outputs need 100 confirmations to be spendable. "
+                f"Mine {101 - num_blocks} more block(s) to unlock these funds."
+            )
+
+        return ToolResult(success=True, output="\n".join(lines))
+
+
 def _load_credentials(config: dict) -> tuple[str, str]:
     """Resolve RPC credentials from cookie file or explicit env vars."""
     cookie_file = config.get("cookie_file") or os.environ.get("BITCOIN_COOKIE_FILE")
@@ -538,3 +738,9 @@ async def mount(
 
     address_tool = GenerateAddressTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
     await coordinator.mount("tools", address_tool, name=address_tool.name)
+
+    send_tool = SendCoinsTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", send_tool, name=send_tool.name)
+
+    mine_tool = MineBlocksTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    await coordinator.mount("tools", mine_tool, name=mine_tool.name)

@@ -45,3 +45,14 @@ Use `manage_wallet` for wallet lifecycle operations.
 | `unload` | User wants to deactivate a wallet without deleting it |
 
 When the user refers to "my wallet" without specifying a name, use `list` first to show what's available before acting. All other tools accept a `wallet` parameter — pass the wallet name through when the user is working in a specific wallet context.
+
+### Mining Blocks (regtest only)
+
+Use `mine_blocks` to generate regtest blocks and direct the coinbase reward to a specific address.
+
+**Standard funding workflow for a new wallet:**
+1. `manage_wallet` action=`create` to create the wallet
+2. `generate_address` wallet=`<name>` to get a receive address
+3. `mine_blocks` num_blocks=`101` address=`<address>` — mine 101 so the first reward (block 1) clears its 100-confirmation maturity lock immediately
+
+Never mine fewer than 101 blocks when the goal is to make funds spendable right away. If the user just wants to advance the chain tip (e.g. to confirm a pending transaction), 1–6 blocks is fine.
