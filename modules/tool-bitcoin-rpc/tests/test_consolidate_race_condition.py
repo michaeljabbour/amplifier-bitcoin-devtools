@@ -41,7 +41,8 @@ def test_rpc_url_is_keyword_only():
 
 def test_execute_does_not_set_wallet_url_attribute():
     """execute() must not mutate self._wallet_url."""
-    import ast, textwrap, pathlib
+    import ast
+    import pathlib
 
     src_path = pathlib.Path(__file__).resolve().parents[1] / (
         "amplifier_module_tool_bitcoin_rpc/__init__.py"
@@ -52,7 +53,10 @@ def test_execute_does_not_set_wallet_url_attribute():
         if not isinstance(node, ast.ClassDef) or node.name != "ConsolidateUtxosTool":
             continue
         for item in ast.walk(node):
-            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "execute":
+            if (
+                isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and item.name == "execute"
+            ):
                 for stmt in ast.walk(item):
                     if isinstance(stmt, ast.Attribute) and isinstance(
                         stmt.ctx, ast.Store
@@ -69,7 +73,12 @@ def test_execute_does_not_set_wallet_url_attribute():
 
 def _mock_rpc_response(method: str, result):
     """Build a JSON-RPC response body."""
-    return {"jsonrpc": "1.0", "id": f"consolidate_{method}", "result": result, "error": None}
+    return {
+        "jsonrpc": "1.0",
+        "id": f"consolidate_{method}",
+        "result": result,
+        "error": None,
+    }
 
 
 UTXO = {
@@ -90,6 +99,7 @@ async def test_concurrent_calls_use_correct_wallet_url():
         captured_urls.append(str(request.url))
         # Decide response based on method in JSON body
         import json
+
         body = json.loads(request.content)
         method = body["method"]
         if method == "listunspent":
@@ -97,7 +107,9 @@ async def test_concurrent_calls_use_correct_wallet_url():
         elif method == "getnewaddress":
             return httpx.Response(200, json=_mock_rpc_response(method, "bcrt1qnewaddr"))
         elif method == "sendall":
-            return httpx.Response(200, json=_mock_rpc_response(method, {"txid": "bb" * 32}))
+            return httpx.Response(
+                200, json=_mock_rpc_response(method, {"txid": "bb" * 32})
+            )
         return httpx.Response(200, json=_mock_rpc_response(method, None))
 
     tool = ConsolidateUtxosTool(RPC_URL, RPC_USER, RPC_PASS)
@@ -116,7 +128,11 @@ async def test_concurrent_calls_use_correct_wallet_url():
     wallet_a_urls = [u for u in captured_urls if "wallet_a" in u]
     wallet_b_urls = [u for u in captured_urls if "wallet_b" in u]
 
-    assert all("wallet_a" in u for u in wallet_a_urls), "wallet_a requests must target wallet_a URL"
-    assert all("wallet_b" in u for u in wallet_b_urls), "wallet_b requests must target wallet_b URL"
+    assert all("wallet_a" in u for u in wallet_a_urls), (
+        "wallet_a requests must target wallet_a URL"
+    )
+    assert all("wallet_b" in u for u in wallet_b_urls), (
+        "wallet_b requests must target wallet_b URL"
+    )
     assert len(wallet_a_urls) >= 1, "Expected at least one request to wallet_a"
     assert len(wallet_b_urls) >= 1, "Expected at least one request to wallet_b"
