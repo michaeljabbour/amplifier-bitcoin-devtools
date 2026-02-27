@@ -39,10 +39,15 @@ def test_market_event_has_required_tags(signing_client):
 
 
 def test_market_shareable_data_array_length():
-    """MarketShareableData content array must have >= 8 elements."""
-    data = [1, "Market", "id", "oracle", "coord", 900000, "yes", "no", ["ws://r"]]
+    """MarketShareableData with >= 8 elements must parse successfully."""
+    from .conftest import make_market_event
 
-    assert len(data) >= 8
+    event = make_market_event()
+    result = _parse_market(event)
+
+    assert result is not None
+    assert result["name"] == "Test Market"
+    assert result["market_id"] == "mkt_test_123"
 
 
 def test_parse_market_handles_malformed_json():

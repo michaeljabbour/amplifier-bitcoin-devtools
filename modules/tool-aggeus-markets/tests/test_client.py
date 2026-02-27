@@ -17,7 +17,7 @@ def test_has_signing_false_when_no_privkey(mock_nostr_client):
 
 def test_init_derives_pubkey_eagerly():
     """Bad private key must fail at construction, not at first use."""
-    with pytest.raises(Exception):
+    with pytest.raises((ValueError, TypeError)):
         NostrClient("ws://localhost:8080", "not_valid_hex", None)
 
 

@@ -12,16 +12,14 @@ from amplifier_module_tool_aggeus_markets.client import (
     _schnorr_sign,
 )
 
+from .conftest import SK1_HEX as SK1, SK1_PUBKEY
+
 # Detect whether the real coincurve library is installed (not our conftest stub).
 # The stub is a plain types.ModuleType with no __file__ attribute.
 _cc = sys.modules.get("coincurve")
 _has_real_coincurve = (
     _cc is not None and hasattr(_cc, "__file__") and _cc.__file__ is not None
 )
-
-# BIP-340 test vector: secret key 1
-SK1 = "00" * 31 + "01"
-SK1_PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
 
 def test_nostr_event_id_deterministic():
@@ -111,3 +109,6 @@ def test_schnorr_sign_deterministic():
     assert len(sig2) == 128
     bytes.fromhex(sig1)
     bytes.fromhex(sig2)
+
+    # Same key + same message must produce identical signatures
+    assert sig1 == sig2
