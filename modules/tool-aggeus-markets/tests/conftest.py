@@ -49,6 +49,7 @@ def _install_coincurve_stub() -> None:
         pass
 
     mod = types.ModuleType("coincurve")
+    mod._IS_STUB = True  # type: ignore[attr-defined]  # sentinel for test detection
 
     class _FakePublicKey:
         def __init__(self, data: bytes) -> None:
