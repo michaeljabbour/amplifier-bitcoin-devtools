@@ -218,7 +218,7 @@ async def test_client_sends_macaroon_header():
     """Client must send Grpc-Metadata-Macaroon header."""
     from amplifier_module_tool_lnd.client import LndClient
 
-    captured_request = None
+    captured_request: httpx.Request | None = None
 
     def capture(request):
         nonlocal captured_request
@@ -231,6 +231,7 @@ async def test_client_sends_macaroon_header():
     await client.get("/v1/getinfo")
     await client.close()
 
+    assert captured_request is not None
     assert captured_request.headers["grpc-metadata-macaroon"] == MACAROON_HEX
 
 
@@ -249,7 +250,7 @@ async def test_get_passes_params():
     """get() must forward params to the request."""
     from amplifier_module_tool_lnd.client import LndClient
 
-    captured_request = None
+    captured_request: httpx.Request | None = None
 
     def capture(request):
         nonlocal captured_request
@@ -262,6 +263,7 @@ async def test_get_passes_params():
     await client.get("/v1/invoices", params={"num_max_invoices": 10})
     await client.close()
 
+    assert captured_request is not None
     assert "num_max_invoices=10" in str(captured_request.url)
 
 

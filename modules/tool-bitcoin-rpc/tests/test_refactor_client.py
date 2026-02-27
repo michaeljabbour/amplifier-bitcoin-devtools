@@ -94,7 +94,7 @@ async def test_rpc_constructs_jsonrpc_envelope():
     """rpc() must send proper JSON-RPC 1.0 envelope with amplifier_ id prefix."""
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
-    captured_request = None
+    captured_request: httpx.Request | None = None
 
     def capture(request):
         nonlocal captured_request
@@ -115,6 +115,7 @@ async def test_rpc_constructs_jsonrpc_envelope():
     result = await client.rpc("getblockcount")
     await client.close()
 
+    assert captured_request is not None
     body = json.loads(captured_request.content)
     assert body["jsonrpc"] == "1.0"
     assert body["id"] == "amplifier_getblockcount"
@@ -129,7 +130,7 @@ async def test_rpc_passes_params():
     """rpc() must pass params to JSON-RPC envelope."""
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
-    captured_request = None
+    captured_request: httpx.Request | None = None
 
     def capture(request):
         nonlocal captured_request
@@ -150,6 +151,7 @@ async def test_rpc_passes_params():
     await client.rpc("listunspent", params=[1])
     await client.close()
 
+    assert captured_request is not None
     body = json.loads(captured_request.content)
     assert body["params"] == [1]
 
@@ -160,7 +162,7 @@ async def test_rpc_with_wallet_url():
     """rpc() with wallet param constructs wallet URL."""
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
-    captured_url = None
+    captured_url: str | None = None
 
     def capture(request):
         nonlocal captured_url
@@ -181,6 +183,7 @@ async def test_rpc_with_wallet_url():
     await client.rpc("listunspent", wallet="testwallet")
     await client.close()
 
+    assert captured_url is not None
     assert "wallet/testwallet" in captured_url
 
 
@@ -251,7 +254,7 @@ async def test_client_uses_auth():
     """Client must send basic auth with user/password."""
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
-    captured_request = None
+    captured_request: httpx.Request | None = None
 
     def capture(request):
         nonlocal captured_request
@@ -273,6 +276,7 @@ async def test_client_uses_auth():
     await client.close()
 
     # Check that Authorization header is present (basic auth)
+    assert captured_request is not None
     assert "authorization" in captured_request.headers
 
 
@@ -351,7 +355,7 @@ async def test_rpc_empty_list_params_preserved():
     """
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
-    captured_request = None
+    captured_request: httpx.Request | None = None
 
     def capture(request):
         nonlocal captured_request
@@ -373,5 +377,6 @@ async def test_rpc_empty_list_params_preserved():
     await client.rpc("test", params=explicit_empty)
     await client.close()
 
+    assert captured_request is not None
     body = json.loads(captured_request.content)
     assert body["params"] == []

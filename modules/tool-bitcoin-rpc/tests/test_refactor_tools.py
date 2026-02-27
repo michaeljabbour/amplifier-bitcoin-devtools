@@ -274,7 +274,7 @@ async def test_send_coins_converts_sats_to_btc():
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
     from amplifier_module_tool_bitcoin_rpc.tools import SendCoinsTool
 
-    captured_body = None
+    captured_body: dict | None = None
 
     def capture(request):
         nonlocal captured_body
@@ -290,6 +290,7 @@ async def test_send_coins_converts_sats_to_btc():
 
     assert result.success
     # 100,000 sats = 0.001 BTC
+    assert captured_body is not None
     assert captured_body["params"][1] == 0.001
 
 

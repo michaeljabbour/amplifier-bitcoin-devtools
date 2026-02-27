@@ -11,6 +11,7 @@ select = ["E", "F", "I", "W", "UP", "B", "SIM"]
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
+reportMissingImports = "warning"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
