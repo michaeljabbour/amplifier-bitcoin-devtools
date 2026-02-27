@@ -7,7 +7,7 @@ bundle:
     markets for local regtest/signet development via Polar.
 
 includes:
-  - bundle: git+https://github.com/microsoft/amplifier-foundation@main
+  - bundle: git+https://github.com/microsoft/amplifier-foundation@bd70513c5c6f
   - bundle: bitcoin-devtools:behaviors/bitcoin
   - bundle: bitcoin-devtools:behaviors/lightning
   - bundle: bitcoin-devtools:behaviors/aggeus

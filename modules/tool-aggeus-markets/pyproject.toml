@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Aggeus prediction market tools — query markets and shares via local Nostr relay"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = ["websockets>=12.0", "coincurve>=13.0", "cryptography>=42.0"]
+dependencies = ["websockets>=12.0", "coincurve>=13.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0", "pytest-asyncio>=0.24", "respx>=0.22", "pytest-mock"]
 
 [project.entry-points."amplifier.modules"]
 tool-aggeus-markets = "amplifier_module_tool_aggeus_markets:mount"
