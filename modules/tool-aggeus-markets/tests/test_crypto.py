@@ -2,11 +2,21 @@
 
 import hashlib
 import json
+import sys
+
+import pytest
 
 from amplifier_module_tool_aggeus_markets.client import (
     _derive_pubkey,
     _nostr_event_id,
     _schnorr_sign,
+)
+
+# Detect whether the real coincurve library is installed (not our conftest stub).
+# The stub is a plain types.ModuleType with no __file__ attribute.
+_cc = sys.modules.get("coincurve")
+_has_real_coincurve = (
+    _cc is not None and hasattr(_cc, "__file__") and _cc.__file__ is not None
 )
 
 # BIP-340 test vector: secret key 1
@@ -69,6 +79,10 @@ def test_derive_pubkey_returns_32_byte_hex():
     bytes.fromhex(result)  # must be valid hex
 
 
+@pytest.mark.skipif(
+    not _has_real_coincurve,
+    reason="requires real coincurve for secp256k1 known-vector validation",
+)
 def test_derive_pubkey_known_vector():
     """Secret key 1 must derive the secp256k1 generator point x-coordinate."""
     result = _derive_pubkey(SK1)
