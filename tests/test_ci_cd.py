@@ -175,6 +175,6 @@ class TestRootPyprojectToml:
     def test_pytest_testpaths(self):
         data = self._load()
         testpaths = data["tool"]["pytest"]["ini_options"]["testpaths"]
-        assert "modules/tool-bitcoin-rpc/tests" in testpaths
-        assert "modules/tool-lnd/tests" in testpaths
-        assert "modules/tool-aggeus-markets/tests" in testpaths
+        # Root testpaths covers only root-level tests (docs, CI, deps).
+        # Module tests run per-module via CI matrix (each needs pip install -e).
+        assert "tests" in testpaths

@@ -7,10 +7,17 @@ imported by both conftest and test modules.
 
 import sys
 import types
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from _helpers import RPC_PASS, RPC_URL, RPC_USER, rpc_error, rpc_success  # noqa: F401
+
+# Ensure tests/ directory is on sys.path so ``_helpers`` can be imported
+# when pytest is invoked from the repo root (where tests/ is not automatically
+# added).  This matches the pattern used by tool-lnd/tests/conftest.py.
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _helpers import RPC_PASS, RPC_URL, RPC_USER, rpc_error, rpc_success  # noqa: E402, F401
 
 
 def _install_amplifier_core_stub():
