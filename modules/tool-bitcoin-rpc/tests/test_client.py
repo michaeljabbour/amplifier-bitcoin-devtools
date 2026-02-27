@@ -168,3 +168,24 @@ def test_load_credentials_from_env_vars(monkeypatch):
 
     assert user == "envuser"
     assert password == "envpass"
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rpc_logs_request(caplog):
+    """rpc() must emit a DEBUG log containing the method name."""
+    import logging
+
+    from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
+
+    respx.post(RPC_URL).mock(return_value=rpc_success("ok"))
+    client = BitcoinRpcClient(url=RPC_URL, user="u", password="p")
+    with caplog.at_level(logging.DEBUG):
+        await client.rpc("getblockcount")
+    assert "getblockcount" in caplog.text
+    await client.close()

@@ -1,9 +1,12 @@
 """Bitcoin Core JSON-RPC client with lazy connection and credential loading."""
 
+import logging
 import os
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class BitcoinRpcClient:
@@ -53,12 +56,17 @@ class BitcoinRpcClient:
             "params": params if params is not None else [],
         }
 
+        logger.debug("RPC request: %s params=%s wallet=%r", method, params, wallet)
+
         client = self._ensure_client()
         response = await client.post(url, json=payload)
         response.raise_for_status()
 
+        logger.debug("RPC response: %s -> %d bytes", method, len(response.text))
+
         data = response.json()
         if data.get("error"):
+            logger.error("RPC error: %s -> %s", method, data["error"])
             raise RuntimeError(f"RPC error: {data['error']}")
         return data["result"]
 

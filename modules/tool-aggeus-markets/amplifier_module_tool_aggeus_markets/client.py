@@ -3,11 +3,14 @@
 import asyncio
 import hashlib
 import json
+import logging
 import time
 import uuid
 from typing import Any
 
 import websockets
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Protocol constants
@@ -146,6 +149,8 @@ class NostrClient:
         self, filters: dict[str, Any], timeout: float = 10.0
     ) -> list[dict]:
         """Send a REQ to the Nostr relay and collect events until EOSE."""
+        logger.debug("Nostr query: %s filters=%s", self._relay_url, filters)
+
         sub_id = uuid.uuid4().hex[:12]
         events: list[dict] = []
 
@@ -189,10 +194,16 @@ class NostrClient:
                 f"Cannot connect to relay {self._relay_url}: {exc}"
             ) from exc
 
+        logger.debug("Nostr received %d events", len(events))
+
         return events
 
     async def publish_event(self, event: dict, timeout: float = 10.0) -> str:
         """Publish a signed Nostr event; return a human-readable relay response."""
+        logger.debug(
+            "Nostr publish: kind=%d to %s", event.get("kind", 0), self._relay_url
+        )
+
         try:
             async with websockets.connect(self._relay_url, open_timeout=5) as ws:
                 await ws.send(json.dumps(["EVENT", event]))

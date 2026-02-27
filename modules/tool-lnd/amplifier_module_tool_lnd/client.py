@@ -1,8 +1,11 @@
 """LND REST API client with lazy connection and TLS+macaroon auth."""
 
+import logging
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 INVOICE_STATE_LABELS: dict[str, str] = {
     "OPEN": "open",
@@ -47,6 +50,8 @@ class LndClient:
             httpx.HTTPStatusError: on non-2xx HTTP response
             httpx.RequestError: on connection failure
         """
+        logger.debug("LND GET %s", path)
+
         client = self._ensure_client()
         kwargs: dict[str, Any] = {}
         if params is not None:
@@ -55,6 +60,9 @@ class LndClient:
             kwargs["timeout"] = timeout
         response = await client.get(path, **kwargs)
         response.raise_for_status()
+
+        logger.debug("LND response: %s %d", path, response.status_code)
+
         return response.json()
 
     async def post(
@@ -69,6 +77,8 @@ class LndClient:
             httpx.HTTPStatusError: on non-2xx HTTP response
             httpx.RequestError: on connection failure
         """
+        logger.debug("LND POST %s", path)
+
         client = self._ensure_client()
         kwargs: dict[str, Any] = {}
         if json is not None:
@@ -77,6 +87,9 @@ class LndClient:
             kwargs["timeout"] = timeout
         response = await client.post(path, **kwargs)
         response.raise_for_status()
+
+        logger.debug("LND response: %s %d", path, response.status_code)
+
         return response.json()
 
     async def close(self) -> None:
