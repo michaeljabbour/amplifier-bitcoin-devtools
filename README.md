@@ -1,4 +1,4 @@
-# utxo-bundle
+# bitcoin-devtools
 
 An [Amplifier](https://github.com/microsoft/amplifier) bundle for Bitcoin
 Core wallet management, Lightning Network operations, and [Aggeus prediction
@@ -40,8 +40,8 @@ modules/
 1. Clone this repository:
 
    ```bash
-   git clone https://github.com/<your-org>/utxo-bundle.git
-   cd utxo-bundle
+   git clone https://github.com/<your-org>/bitcoin-devtools.git
+   cd bitcoin-devtools
    ```
 
 2. Copy the environment template and fill in your local paths:

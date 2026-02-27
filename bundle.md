@@ -1,6 +1,6 @@
 ---
 bundle:
-  name: utxo-bundle
+  name: bitcoin-devtools
   version: 0.1.0
   description: >
     Bitcoin Core wallet management, Lightning Network, and Aggeus prediction
@@ -8,16 +8,16 @@ bundle:
 
 includes:
   - bundle: git+https://github.com/microsoft/amplifier-foundation@main
-  - bundle: utxo-bundle:behaviors/bitcoin
-  - bundle: utxo-bundle:behaviors/lightning
-  - bundle: utxo-bundle:behaviors/aggeus
+  - bundle: bitcoin-devtools:behaviors/bitcoin
+  - bundle: bitcoin-devtools:behaviors/lightning
+  - bundle: bitcoin-devtools:behaviors/aggeus
 ---
 
 # Bitcoin + Lightning + Aggeus Assistant
 
-@utxo-bundle:context/instructions.md
+@bitcoin-devtools:context/instructions.md
 
-@utxo-bundle:context/agent-awareness.md
+@bitcoin-devtools:context/agent-awareness.md
 
 ---
 

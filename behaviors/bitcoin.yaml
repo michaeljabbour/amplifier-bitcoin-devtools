@@ -1,5 +1,5 @@
 bundle:
-  name: utxo-bundle-bitcoin
+  name: bitcoin-devtools-bitcoin
   version: 0.1.0
   description: >
     Bitcoin Core L1 tools — wallet management, UTXO operations, address
@@ -13,8 +13,8 @@ tools:
 
 agents:
   include:
-    - utxo-bundle:wallet-manager
+    - bitcoin-devtools:wallet-manager
 
 context:
   include:
-    - utxo-bundle:context/instructions.md
+    - bitcoin-devtools:context/instructions.md

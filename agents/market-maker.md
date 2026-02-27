@@ -49,7 +49,7 @@ You handle all market browsing, inspection, and creation operations.
 
 For full protocol details, see the protocol reference below.
 
-@utxo-bundle:context/aggeus-protocol.md
+@bitcoin-devtools:context/aggeus-protocol.md
 
 ---
 

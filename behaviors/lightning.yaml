@@ -1,5 +1,5 @@
 bundle:
-  name: utxo-bundle-lightning
+  name: bitcoin-devtools-lightning
   version: 0.1.0
   description: >
     LND Lightning Network tools — invoices, payments, channel balances,
@@ -12,8 +12,8 @@ tools:
 
 agents:
   include:
-    - utxo-bundle:lightning-specialist
+    - bitcoin-devtools:lightning-specialist
 
 context:
   include:
-    - utxo-bundle:context/instructions.md
+    - bitcoin-devtools:context/instructions.md

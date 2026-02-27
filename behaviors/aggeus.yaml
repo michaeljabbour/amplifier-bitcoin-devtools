@@ -1,5 +1,5 @@
 bundle:
-  name: utxo-bundle-aggeus
+  name: bitcoin-devtools-aggeus
   version: 0.1.0
   description: >
     Aggeus prediction market tools — browse, inspect, and create
@@ -13,8 +13,8 @@ tools:
 
 agents:
   include:
-    - utxo-bundle:market-maker
+    - bitcoin-devtools:market-maker
 
 context:
   include:
-    - utxo-bundle:context/aggeus-protocol.md
+    - bitcoin-devtools:context/aggeus-protocol.md
