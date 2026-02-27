@@ -187,13 +187,8 @@ class SplitUtxosTool:
         try:
             if not default_address:
                 default_address = await self._client.rpc("getnewaddress", wallet=wallet)
-        except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Failed generating address: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
         address_amounts: list[tuple[str, float]] = []
         for spec in outputs_spec:
@@ -226,13 +221,8 @@ class SplitUtxosTool:
                 params=[signed["hex"]],
                 wallet=wallet,
             )
-        except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Transaction failed: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
         txid = result if isinstance(result, str) else result.get("txid", str(result))
 
@@ -290,6 +280,12 @@ The `wallet` parameter is required for every action except `list`."""
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         action = input.get("action")
         wallet = input.get("wallet")
+
+        if action is None:
+            return ToolResult(
+                success=False,
+                error={"message": "'action' is required."},
+            )
 
         try:
             if action == "list":
@@ -725,7 +721,7 @@ first reward immediately spendable."""
             return ToolResult(
                 success=False, error={"message": "'address' is required."}
             )
-        if not num_blocks or num_blocks < 1:
+        if num_blocks is None or num_blocks < 1:
             return ToolResult(
                 success=False,
                 error={"message": "'num_blocks' must be a positive integer."},
