@@ -9,8 +9,8 @@ Verifies:
 6. Validates tls_cert and macaroon_path are present
 """
 
-import asyncio
 import ast
+import asyncio
 import inspect
 import os
 import pathlib
@@ -18,9 +18,7 @@ import tempfile
 
 import pytest
 
-INIT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
-    "amplifier_module_tool_lnd/__init__.py"
-)
+INIT_SRC = pathlib.Path(__file__).resolve().parents[1] / ("amplifier_module_tool_lnd/__init__.py")
 
 
 # ---------------------------------------------------------------------------
@@ -39,9 +37,7 @@ def test_init_is_thin():
     """__init__.py should be thin wiring (~30 lines), not the old monolith."""
     source = INIT_SRC.read_text()
     lines = [line for line in source.strip().splitlines() if line.strip()]
-    assert len(lines) < 60, (
-        f"__init__.py has {len(lines)} non-empty lines, should be thin (~30)"
-    )
+    assert len(lines) < 60, f"__init__.py has {len(lines)} non-empty lines, should be thin (~30)"
 
 
 def test_init_has_mount_function():
@@ -49,9 +45,7 @@ def test_init_has_mount_function():
     source = INIT_SRC.read_text()
     tree = ast.parse(source)
     func_names = {
-        n.name
-        for n in ast.walk(tree)
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     assert "mount" in func_names
 
@@ -62,9 +56,7 @@ def test_init_imports_from_client_and_tools():
     has_client_import = (
         "from .client" in source or "from amplifier_module_tool_lnd.client" in source
     )
-    has_tools_import = (
-        "from .tools" in source or "from amplifier_module_tool_lnd.tools" in source
-    )
+    has_tools_import = "from .tools" in source or "from amplifier_module_tool_lnd.tools" in source
     assert has_client_import, "__init__.py must import from .client"
     assert has_tools_import, "__init__.py must import from .tools"
 

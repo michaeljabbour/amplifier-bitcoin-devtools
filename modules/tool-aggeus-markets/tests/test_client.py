@@ -1,7 +1,6 @@
 """Tests for the NostrClient class."""
 
 import pytest
-
 from amplifier_module_tool_aggeus_markets.client import NostrClient, _nostr_event_id
 
 
@@ -28,9 +27,7 @@ def test_close_is_noop(signing_client):
 
 def test_build_signed_event_has_required_fields(signing_client):
     """Signed event must contain id, pubkey, created_at, kind, tags, content, sig."""
-    event = signing_client.build_signed_event(
-        kind=1, tags=[["t", "test"]], content="hello"
-    )
+    event = signing_client.build_signed_event(kind=1, tags=[["t", "test"]], content="hello")
 
     required = {"id", "pubkey", "created_at", "kind", "tags", "content", "sig"}
     assert required <= set(event.keys())

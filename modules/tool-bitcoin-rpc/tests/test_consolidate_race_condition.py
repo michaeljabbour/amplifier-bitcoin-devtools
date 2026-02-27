@@ -15,7 +15,6 @@ import json
 import httpx
 import pytest
 import respx
-
 from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 from amplifier_module_tool_bitcoin_rpc.tools import ConsolidateUtxosTool
 
@@ -84,9 +83,7 @@ async def test_concurrent_calls_use_correct_wallet_url():
         elif method == "getnewaddress":
             return httpx.Response(200, json=_mock_rpc_response(method, "bcrt1qnewaddr"))
         elif method == "sendall":
-            return httpx.Response(
-                200, json=_mock_rpc_response(method, {"txid": "bb" * 32})
-            )
+            return httpx.Response(200, json=_mock_rpc_response(method, {"txid": "bb" * 32}))
         return httpx.Response(200, json=_mock_rpc_response(method, None))
 
     client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
@@ -108,11 +105,7 @@ async def test_concurrent_calls_use_correct_wallet_url():
     wallet_a_urls = [u for u in captured_urls if "wallet_a" in u]
     wallet_b_urls = [u for u in captured_urls if "wallet_b" in u]
 
-    assert all("wallet_a" in u for u in wallet_a_urls), (
-        "wallet_a requests must target wallet_a URL"
-    )
-    assert all("wallet_b" in u for u in wallet_b_urls), (
-        "wallet_b requests must target wallet_b URL"
-    )
+    assert all("wallet_a" in u for u in wallet_a_urls), "wallet_a requests must target wallet_a URL"
+    assert all("wallet_b" in u for u in wallet_b_urls), "wallet_b requests must target wallet_b URL"
     assert len(wallet_a_urls) >= 1, "Expected at least one request to wallet_a"
     assert len(wallet_b_urls) >= 1, "Expected at least one request to wallet_b"

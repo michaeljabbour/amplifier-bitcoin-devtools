@@ -24,9 +24,7 @@ async def _lnd_request(coro: Callable[[], Awaitable[Any]]) -> ToolResult | Any:
     except httpx.HTTPStatusError as e:
         return ToolResult(
             success=False,
-            error={
-                "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
-            },
+            error={"message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"},
         )
     except httpx.RequestError as e:
         return ToolResult(
@@ -62,7 +60,9 @@ invoice that lets the payer choose."""
             "properties": {
                 "amt_sats": {
                     "type": "integer",
-                    "description": "Invoice amount in satoshis. Omit or pass 0 for an any-amount invoice.",
+                    "description": (
+                        "Invoice amount in satoshis. Omit or pass 0 for an any-amount invoice."
+                    ),
                 },
                 "memo": {
                     "type": "string",
@@ -70,7 +70,9 @@ invoice that lets the payer choose."""
                 },
                 "expiry": {
                     "type": "integer",
-                    "description": "Seconds until the invoice expires. Defaults to 86400 (24 hours).",
+                    "description": (
+                        "Seconds until the invoice expires. Defaults to 86400 (24 hours)."
+                    ),
                 },
             },
             "required": [],
@@ -88,9 +90,7 @@ invoice that lets the payer choose."""
         if expiry := params.get("expiry"):
             body["expiry"] = str(expiry)
 
-        result = await _lnd_request(
-            lambda: self._client.post("/v1/invoices", json=body)
-        )
+        result = await _lnd_request(lambda: self._client.post("/v1/invoices", json=body))
         if isinstance(result, ToolResult):
             return result
         data = result
@@ -162,9 +162,7 @@ Pass `pending_only=true` to show only open (unpaid) invoices."""
         if params.get("pending_only"):
             query["pending_only"] = True
 
-        result = await _lnd_request(
-            lambda: self._client.get("/v1/invoices", params=query)
-        )
+        result = await _lnd_request(lambda: self._client.get("/v1/invoices", params=query))
         if isinstance(result, ToolResult):
             return result
         data = result
@@ -180,9 +178,7 @@ Pass `pending_only=true` to show only open (unpaid) invoices."""
             idx = inv.get("add_index", "?")
             amt = int(inv.get("value", 0))
             memo = inv.get("memo", "") or ""
-            state = INVOICE_STATE_LABELS.get(
-                inv.get("state", ""), inv.get("state", "?")
-            )
+            state = INVOICE_STATE_LABELS.get(inv.get("state", ""), inv.get("state", "?"))
             r_hash = inv.get("r_hash", "")
             short_hash = f"{r_hash[:8]}..{r_hash[-4:]}" if len(r_hash) > 12 else r_hash
             lines.append(f"| {idx} | {amt:,} | {memo} | {state} | {short_hash} |")
@@ -322,9 +318,7 @@ send), remote balance (funds it can receive), and any pending amounts."""
         local_sat = int((bal.get("local_balance") or {}).get("sat", 0))
         remote_sat = int((bal.get("remote_balance") or {}).get("sat", 0))
         pending_local = int((bal.get("pending_open_local_balance") or {}).get("sat", 0))
-        pending_remote = int(
-            (bal.get("pending_open_remote_balance") or {}).get("sat", 0)
-        )
+        pending_remote = int((bal.get("pending_open_remote_balance") or {}).get("sat", 0))
 
         lines = [
             f"Local balance (sendable):    {local_sat:>12,} sats",
@@ -367,7 +361,9 @@ Use `timeout_seconds` to override the payment timeout (default: 60 seconds)."""
             "properties": {
                 "payment_request": {
                     "type": "string",
-                    "description": "The BOLT11 invoice string to pay (starts with lnbc, lntb, etc.).",
+                    "description": (
+                        "The BOLT11 invoice string to pay (starts with lnbc, lntb, etc.)."
+                    ),
                 },
                 "fee_limit_sats": {
                     "type": "integer",

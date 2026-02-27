@@ -131,9 +131,7 @@ async def test_list_markets_with_results():
         "nh",
         ["ws://r"],
     ]
-    events = [
-        {"id": "eid", "content": json.dumps(data), "created_at": 0, "pubkey": "pk"}
-    ]
+    events = [{"id": "eid", "content": json.dumps(data), "created_at": 0, "pubkey": "pk"}]
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
     client.query_relay = make_async_return(events)

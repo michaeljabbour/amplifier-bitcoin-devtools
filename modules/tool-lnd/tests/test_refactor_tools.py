@@ -15,12 +15,9 @@ import pathlib
 import httpx
 import pytest
 import respx
-
 from conftest import make_test_client
 
-TOOLS_SRC = pathlib.Path(__file__).resolve().parents[1] / (
-    "amplifier_module_tool_lnd/tools.py"
-)
+TOOLS_SRC = pathlib.Path(__file__).resolve().parents[1] / ("amplifier_module_tool_lnd/tools.py")
 
 BASE_URL = "https://localhost:8080"
 TLS_CERT = "/tmp/fake-tls.cert"

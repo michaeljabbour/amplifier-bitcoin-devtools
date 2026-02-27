@@ -1,7 +1,6 @@
 """BDD-style tests for all 6 LND tool classes."""
 
 import pytest
-
 from amplifier_module_tool_lnd.tools import (
     ChannelBalanceTool,
     CreateInvoiceTool,
@@ -10,7 +9,6 @@ from amplifier_module_tool_lnd.tools import (
     NodeInfoTool,
     PayInvoiceTool,
 )
-
 
 # ---------------------------------------------------------------------------
 # CreateInvoiceTool

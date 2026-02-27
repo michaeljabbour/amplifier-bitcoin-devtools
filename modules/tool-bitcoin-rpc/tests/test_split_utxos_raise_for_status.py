@@ -13,7 +13,6 @@ import pathlib
 import httpx
 import pytest
 import respx
-
 from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
 SRC_PATH = pathlib.Path(__file__).resolve().parents[1] / (
@@ -53,10 +52,7 @@ def test_rpc_method_has_raise_for_status():
     # Find the rpc method
     rpc_method = None
     for node in ast.walk(client_class):
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == "rpc"
-        ):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "rpc":
             rpc_method = node
             break
     assert rpc_method is not None, "rpc method not found in BitcoinRpcClient"

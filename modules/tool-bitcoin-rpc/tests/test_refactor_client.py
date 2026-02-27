@@ -214,9 +214,7 @@ async def test_rpc_raises_http_status_error_on_500():
     """rpc() must raise HTTPStatusError on HTTP 500."""
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
-    respx.post(RPC_URL).mock(
-        return_value=httpx.Response(500, text="Internal Server Error")
-    )
+    respx.post(RPC_URL).mock(return_value=httpx.Response(500, text="Internal Server Error"))
 
     client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
     with pytest.raises(httpx.HTTPStatusError):

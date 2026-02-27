@@ -190,9 +190,7 @@ async def test_tool_catches_http_status_error():
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
     from amplifier_module_tool_bitcoin_rpc.tools import ListUtxosTool
 
-    respx.post(RPC_URL).mock(
-        return_value=httpx.Response(500, text="Internal Server Error")
-    )
+    respx.post(RPC_URL).mock(return_value=httpx.Response(500, text="Internal Server Error"))
 
     client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
     tool = ListUtxosTool(client)
@@ -238,9 +236,7 @@ async def test_mine_blocks_warns_under_101():
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
     from amplifier_module_tool_bitcoin_rpc.tools import MineBlocksTool
 
-    respx.post(RPC_URL).mock(
-        return_value=_success_response("generatetoaddress", ["blockhash1"])
-    )
+    respx.post(RPC_URL).mock(return_value=_success_response("generatetoaddress", ["blockhash1"]))
 
     client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
     tool = MineBlocksTool(client)
@@ -258,9 +254,7 @@ async def test_generate_address_delegates():
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
     from amplifier_module_tool_bitcoin_rpc.tools import GenerateAddressTool
 
-    respx.post(RPC_URL).mock(
-        return_value=_success_response("getnewaddress", "bcrt1qnewaddr")
-    )
+    respx.post(RPC_URL).mock(return_value=_success_response("getnewaddress", "bcrt1qnewaddr"))
 
     client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
     tool = GenerateAddressTool(client)
@@ -317,9 +311,7 @@ async def test_manage_wallet_list():
         if body["method"] == "listwallets":
             return _success_response("listwallets", ["wallet1"])
         elif body["method"] == "listwalletdir":
-            return _success_response(
-                "listwalletdir", {"wallets": [{"name": "wallet1"}]}
-            )
+            return _success_response("listwalletdir", {"wallets": [{"name": "wallet1"}]})
         return _success_response(body["method"], None)
 
     respx.post(RPC_URL).mock(side_effect=handler)

@@ -3,9 +3,6 @@
 import json
 
 import pytest
-
-from .conftest import make_market_event
-
 from amplifier_module_tool_aggeus_markets.tools import (
     CreateMarketTool,
     GetMarketTool,
@@ -13,6 +10,7 @@ from amplifier_module_tool_aggeus_markets.tools import (
     ListSharesTool,
 )
 
+from .conftest import make_market_event
 
 # ---------------------------------------------------------------------------
 # ListMarketsTool
@@ -113,9 +111,7 @@ async def test_list_shares_returns_table_with_buyer_cost(mock_nostr_client):
 async def test_create_market_returns_id_and_preimages(signing_client):
     """GIVEN valid input WHEN creating market THEN returns market ID and preimages."""
     tool = CreateMarketTool(signing_client)
-    result = await tool.execute(
-        {"question": "Will it rain tomorrow?", "resolution_block": 850000}
-    )
+    result = await tool.execute({"question": "Will it rain tomorrow?", "resolution_block": 850000})
 
     assert result.success is True
     assert "Will it rain tomorrow?" in result.output

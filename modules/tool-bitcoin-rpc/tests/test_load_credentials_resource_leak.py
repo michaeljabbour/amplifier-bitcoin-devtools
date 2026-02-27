@@ -12,7 +12,6 @@ import pathlib
 import tempfile
 
 import pytest
-
 from amplifier_module_tool_bitcoin_rpc.client import load_credentials
 
 SRC_PATH = pathlib.Path(__file__).resolve().parents[1] / (

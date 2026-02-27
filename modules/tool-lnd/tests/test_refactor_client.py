@@ -16,12 +16,9 @@ import tempfile
 import httpx
 import pytest
 import respx
-
 from conftest import make_test_client
 
-CLIENT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
-    "amplifier_module_tool_lnd/client.py"
-)
+CLIENT_SRC = pathlib.Path(__file__).resolve().parents[1] / ("amplifier_module_tool_lnd/client.py")
 
 BASE_URL = "https://localhost:8080"
 TLS_CERT = "/tmp/fake-tls.cert"
@@ -95,7 +92,7 @@ def test_client_lazy_init():
 
 
 def test_invoice_state_labels_content():
-    """INVOICE_STATE_LABELS must map OPEN->open, SETTLED->settled, CANCELED->cancelled, ACCEPTED->accepted."""
+    """INVOICE_STATE_LABELS maps OPEN/SETTLED/CANCELED/ACCEPTED to lowercase."""
     from amplifier_module_tool_lnd.client import INVOICE_STATE_LABELS
 
     assert INVOICE_STATE_LABELS["OPEN"] == "open"
@@ -193,9 +190,7 @@ async def test_get_raises_on_http_error():
     """get() must raise HTTPStatusError on non-2xx."""
     from amplifier_module_tool_lnd.client import LndClient
 
-    respx.get(f"{BASE_URL}/v1/getinfo").mock(
-        return_value=httpx.Response(500, text="error")
-    )
+    respx.get(f"{BASE_URL}/v1/getinfo").mock(return_value=httpx.Response(500, text="error"))
 
     client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     with pytest.raises(httpx.HTTPStatusError):
@@ -209,9 +204,7 @@ async def test_post_raises_on_http_error():
     """post() must raise HTTPStatusError on non-2xx."""
     from amplifier_module_tool_lnd.client import LndClient
 
-    respx.post(f"{BASE_URL}/v1/invoices").mock(
-        return_value=httpx.Response(400, text="bad request")
-    )
+    respx.post(f"{BASE_URL}/v1/invoices").mock(return_value=httpx.Response(400, text="bad request"))
 
     client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     with pytest.raises(httpx.HTTPStatusError):

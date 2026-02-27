@@ -5,14 +5,14 @@ import json
 import sys
 
 import pytest
-
 from amplifier_module_tool_aggeus_markets.client import (
     _derive_pubkey,
     _nostr_event_id,
     _schnorr_sign,
 )
 
-from .conftest import SK1_HEX as SK1, SK1_PUBKEY
+from .conftest import SK1_HEX as SK1
+from .conftest import SK1_PUBKEY
 
 # Detect whether the real coincurve library is installed (not our conftest stub).
 # The stub sets _IS_STUB = True; the real library does not have this attribute.

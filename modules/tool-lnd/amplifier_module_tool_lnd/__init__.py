@@ -28,9 +28,7 @@ async def mount(
 
     tls_cert = config.get("tls_cert") or os.environ.get("LND_TLS_CERT")
     if not tls_cert:
-        raise ValueError(
-            "LND TLS cert path is required (config: tls_cert or env: LND_TLS_CERT)"
-        )
+        raise ValueError("LND TLS cert path is required (config: tls_cert or env: LND_TLS_CERT)")
 
     macaroon_path = config.get("macaroon_path") or os.environ.get("LND_MACAROON_PATH")
     if not macaroon_path:

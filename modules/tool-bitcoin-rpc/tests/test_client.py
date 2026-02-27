@@ -9,10 +9,8 @@ import json
 import httpx
 import pytest
 import respx
-
-from amplifier_module_tool_bitcoin_rpc.client import load_credentials
 from _helpers import RPC_URL, rpc_error, rpc_success
-
+from amplifier_module_tool_bitcoin_rpc.client import load_credentials
 
 # ---------------------------------------------------------------------------
 # JSON-RPC envelope

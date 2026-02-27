@@ -9,8 +9,8 @@ Verifies:
 6. CreateMarketTool conditionally mounted only when has_signing
 """
 
-import asyncio
 import ast
+import asyncio
 import inspect
 import pathlib
 
@@ -39,9 +39,7 @@ def test_init_is_thin():
     """__init__.py should be thin wiring (~30 lines), not the old monolith."""
     source = INIT_SRC.read_text()
     lines = [line for line in source.strip().splitlines() if line.strip()]
-    assert len(lines) < 60, (
-        f"__init__.py has {len(lines)} non-empty lines, should be thin (~30)"
-    )
+    assert len(lines) < 60, f"__init__.py has {len(lines)} non-empty lines, should be thin (~30)"
 
 
 def test_init_has_mount_function():
@@ -49,9 +47,7 @@ def test_init_has_mount_function():
     source = INIT_SRC.read_text()
     tree = ast.parse(source)
     func_names = {
-        n.name
-        for n in ast.walk(tree)
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
     assert "mount" in func_names
 
@@ -60,12 +56,10 @@ def test_init_imports_from_client_and_tools():
     """__init__.py must import from .client and .tools."""
     source = INIT_SRC.read_text()
     has_client_import = (
-        "from .client" in source
-        or "from amplifier_module_tool_aggeus_markets.client" in source
+        "from .client" in source or "from amplifier_module_tool_aggeus_markets.client" in source
     )
     has_tools_import = (
-        "from .tools" in source
-        or "from amplifier_module_tool_aggeus_markets.tools" in source
+        "from .tools" in source or "from amplifier_module_tool_aggeus_markets.tools" in source
     )
     assert has_client_import, "__init__.py must import from .client"
     assert has_tools_import, "__init__.py must import from .tools"

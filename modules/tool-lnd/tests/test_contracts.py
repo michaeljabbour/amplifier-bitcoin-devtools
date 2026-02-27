@@ -1,7 +1,6 @@
 """Contract tests for LND REST API request/response shapes."""
 
 import pytest
-
 from amplifier_module_tool_lnd.tools import CreateInvoiceTool, PayInvoiceTool
 
 
@@ -41,7 +40,7 @@ async def test_pay_invoice_request_shape(mock_lnd_client):
 
 @pytest.mark.asyncio
 async def test_invoice_response_has_required_fields(mock_lnd_client):
-    """CreateInvoiceTool output must reflect payment_request, r_hash, and add_index from response."""
+    """CreateInvoiceTool output must reflect payment_request, r_hash, and add_index."""
     mock_lnd_client.post.return_value = {
         "payment_request": "lnbc500n1ptest...",
         "r_hash": "deadbeef12345678",

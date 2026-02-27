@@ -56,9 +56,7 @@ class BitcoinRpcClient:
             "params": params if params is not None else [],
         }
 
-        logger.debug(
-            "RPC request: %s params=%d wallet=%r", method, len(params or []), wallet
-        )
+        logger.debug("RPC request: %s params=%d wallet=%r", method, len(params or []), wallet)
 
         client = self._ensure_client()
         response = await client.post(url, json=payload)
@@ -86,15 +84,14 @@ def load_credentials(config: dict) -> tuple[str, str]:
         try:
             with open(cookie_file) as f:
                 content = f.read().strip()
-        except FileNotFoundError:
+        except FileNotFoundError as err:
             raise ValueError(
                 f"Cookie file not found at {cookie_file} -- check BITCOIN_COOKIE_FILE"
-            )
-        except PermissionError:
+            ) from err
+        except PermissionError as err:
             raise ValueError(
-                f"Permission denied reading cookie file at {cookie_file}"
-                " -- check file permissions"
-            )
+                f"Permission denied reading cookie file at {cookie_file} -- check file permissions"
+            ) from err
         user, password = content.split(":", 1)
         return user, password
     return (

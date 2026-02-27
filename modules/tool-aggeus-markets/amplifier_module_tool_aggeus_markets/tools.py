@@ -21,7 +21,6 @@ from .client import (
     _shorten,
 )
 
-
 # ---------------------------------------------------------------------------
 # Query tools
 # ---------------------------------------------------------------------------
@@ -72,9 +71,7 @@ Returns an empty result when no markets have been published yet."""
         except ConnectionError as exc:
             return ToolResult(success=False, error={"message": str(exc)})
         except Exception as exc:
-            return ToolResult(
-                success=False, error={"message": f"Relay query failed: {exc}"}
-            )
+            return ToolResult(success=False, error={"message": f"Relay query failed: {exc}"})
 
         markets = [m for e in events if (m := _parse_market(e)) is not None]
         if not markets:
@@ -83,9 +80,7 @@ Returns an empty result when no markets have been published yet."""
                 output=f"No market listings found on {self._client.relay_url}.",
             )
 
-        lines = [
-            f"Found {len(markets)} market listing(s) on {self._client.relay_url}\n"
-        ]
+        lines = [f"Found {len(markets)} market listing(s) on {self._client.relay_url}\n"]
         lines.append("| Market Name | Market ID | Oracle | Resolution Block |")
         lines.append("|-------------|-----------|--------|-----------------|")
         for m in markets:
@@ -125,7 +120,9 @@ Use aggeus_list_markets first to discover available market IDs."""
             "properties": {
                 "market_id": {
                     "type": "string",
-                    "description": "The unique market identifier (the 'd' tag value from the listing event).",
+                    "description": (
+                        "The unique market identifier (the 'd' tag value from the listing event)."
+                    ),
                 },
             },
             "required": ["market_id"],
@@ -134,9 +131,7 @@ Use aggeus_list_markets first to discover available market IDs."""
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         market_id = input.get("market_id", "").strip()
         if not market_id:
-            return ToolResult(
-                success=False, error={"message": "'market_id' is required."}
-            )
+            return ToolResult(success=False, error={"message": "'market_id' is required."})
 
         filters: dict[str, Any] = {
             "kinds": [AGGEUS_MARKET_LISTING_KIND],
@@ -149,9 +144,7 @@ Use aggeus_list_markets first to discover available market IDs."""
         except ConnectionError as exc:
             return ToolResult(success=False, error={"message": str(exc)})
         except Exception as exc:
-            return ToolResult(
-                success=False, error={"message": f"Relay query failed: {exc}"}
-            )
+            return ToolResult(success=False, error={"message": f"Relay query failed: {exc}"})
 
         if not events:
             return ToolResult(
@@ -168,9 +161,7 @@ Use aggeus_list_markets first to discover available market IDs."""
                 },
             )
 
-        relays_str = (
-            "\n".join(f"    {r}" for r in m["relays"]) if m["relays"] else "    (none)"
-        )
+        relays_str = "\n".join(f"    {r}" for r in m["relays"]) if m["relays"] else "    (none)"
         lines = [
             f"Market: {m['name']}",
             "",
@@ -234,9 +225,7 @@ Use aggeus_list_markets to find a market_id first."""
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         market_id = input.get("market_id", "").strip()
         if not market_id:
-            return ToolResult(
-                success=False, error={"message": "'market_id' is required."}
-            )
+            return ToolResult(success=False, error={"message": "'market_id' is required."})
 
         limit = int(input.get("limit", 100))
         filters: dict[str, Any] = {
@@ -251,9 +240,7 @@ Use aggeus_list_markets to find a market_id first."""
         except ConnectionError as exc:
             return ToolResult(success=False, error={"message": str(exc)})
         except Exception as exc:
-            return ToolResult(
-                success=False, error={"message": f"Relay query failed: {exc}"}
-            )
+            return ToolResult(success=False, error={"message": f"Relay query failed: {exc}"})
 
         if not events:
             return ToolResult(
@@ -276,12 +263,8 @@ Use aggeus_list_markets to find a market_id first."""
             )
 
         lines = [f"Found {len(shares)} share(s) for market {_shorten(market_id)}\n"]
-        lines.append(
-            "| Share ID | Side | Confidence | Deposit | Buyer Cost | Outpoint |"
-        )
-        lines.append(
-            "|----------|------|-----------|---------|------------|----------|"
-        )
+        lines.append("| Share ID | Side | Confidence | Deposit | Buyer Cost | Outpoint |")
+        lines.append("|----------|------|-----------|---------|------------|----------|")
         for share in shares:
             share_id = share.get("share_id", "?")
             side = share.get("prediction", "?")
@@ -375,9 +358,7 @@ to settle the market (the winning preimage unlocks the Lightning payments)."""
             )
         question = question.strip()
         if not question:
-            return ToolResult(
-                success=False, error={"message": "'question' is required."}
-            )
+            return ToolResult(success=False, error={"message": "'question' is required."})
 
         try:
             resolution_block = int(input["resolution_block"])
@@ -425,22 +406,16 @@ to settle the market (the winning preimage unlocks the Lightning payments)."""
         content = json.dumps(market_data, separators=(",", ":"))
 
         try:
-            event = self._client.build_signed_event(
-                AGGEUS_MARKET_LISTING_KIND, tags, content
-            )
+            event = self._client.build_signed_event(AGGEUS_MARKET_LISTING_KIND, tags, content)
         except Exception as exc:
-            return ToolResult(
-                success=False, error={"message": f"Failed to sign event: {exc}"}
-            )
+            return ToolResult(success=False, error={"message": f"Failed to sign event: {exc}"})
 
         try:
             relay_status = await self._client.publish_event(event)
         except ConnectionError as exc:
             return ToolResult(success=False, error={"message": str(exc)})
         except Exception as exc:
-            return ToolResult(
-                success=False, error={"message": f"Relay publish failed: {exc}"}
-            )
+            return ToolResult(success=False, error={"message": f"Relay publish failed: {exc}"})
 
         lines = [
             f"Market created: {question}",

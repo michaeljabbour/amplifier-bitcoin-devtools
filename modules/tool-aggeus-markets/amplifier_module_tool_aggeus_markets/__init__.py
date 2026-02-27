@@ -18,15 +18,11 @@ async def mount(
     # Relay URL: explicit url > host+port > env vars > default
     relay_url = config.get("relay_url") or os.environ.get("AGGEUS_RELAY_URL")
     if not relay_url:
-        host = config.get("relay_host") or os.environ.get(
-            "AGGEUS_RELAY_HOST", "localhost"
-        )
+        host = config.get("relay_host") or os.environ.get("AGGEUS_RELAY_HOST", "localhost")
         port = config.get("relay_port") or os.environ.get("AGGEUS_RELAY_PORT", "8080")
         relay_url = f"ws://{host}:{port}"
 
-    oracle_privkey = config.get("oracle_private_key") or os.environ.get(
-        "AGGEUS_ORACLE_PRIVKEY"
-    )
+    oracle_privkey = config.get("oracle_private_key") or os.environ.get("AGGEUS_ORACLE_PRIVKEY")
     coordinator_pubkey = config.get("coordinator_pubkey") or os.environ.get(
         "AGGEUS_COORDINATOR_PUBKEY"
     )

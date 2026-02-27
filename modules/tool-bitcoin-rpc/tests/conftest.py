@@ -10,7 +10,6 @@ import types
 from unittest.mock import AsyncMock
 
 import pytest
-
 from _helpers import RPC_PASS, RPC_URL, RPC_USER, rpc_error, rpc_success  # noqa: F401
 
 

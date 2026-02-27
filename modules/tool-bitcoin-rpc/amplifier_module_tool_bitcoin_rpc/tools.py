@@ -70,7 +70,9 @@ or consolidations."""
                 },
                 "min_confirmations": {
                     "type": "integer",
-                    "description": "Minimum confirmations required. Defaults to 0 (regtest-friendly).",
+                    "description": (
+                        "Minimum confirmations required. Defaults to 0 (regtest-friendly)."
+                    ),
                     "default": 0,
                 },
             },
@@ -82,9 +84,7 @@ or consolidations."""
         min_conf = input.get("min_confirmations", 0)
 
         try:
-            utxos = await self._client.rpc(
-                "listunspent", params=[min_conf], wallet=wallet
-            )
+            utxos = await self._client.rpc("listunspent", params=[min_conf], wallet=wallet)
         except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
             return _rpc_error_result(e)
 
@@ -179,9 +179,7 @@ class SplitUtxosTool:
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         outputs_spec = input.get("outputs", [])
         if not isinstance(outputs_spec, list):
-            return ToolResult(
-                success=False, error={"message": "'outputs' must be an array."}
-            )
+            return ToolResult(success=False, error={"message": "'outputs' must be an array."})
         wallet = input.get("wallet", "")
         default_address = input.get("address")
 
@@ -294,10 +292,7 @@ The `wallet` parameter is required for every action except `list`."""
         try:
             if action == "list":
                 loaded = await self._client.rpc("listwallets")
-                on_disk = [
-                    w["name"]
-                    for w in (await self._client.rpc("listwalletdir"))["wallets"]
-                ]
+                on_disk = [w["name"] for w in (await self._client.rpc("listwalletdir"))["wallets"]]
                 lines = ["Wallets on disk:"]
                 for name in on_disk:
                     tag = " (loaded)" if name in loaded else ""
@@ -320,9 +315,7 @@ The `wallet` parameter is required for every action except `list`."""
             if action in ("create", "load") and not wallet:
                 return ToolResult(
                     success=False,
-                    error={
-                        "message": f"A non-empty wallet name is required for '{action}'."
-                    },
+                    error={"message": f"A non-empty wallet name is required for '{action}'."},
                 )
 
             if action == "info":
@@ -340,15 +333,11 @@ The `wallet` parameter is required for every action except `list`."""
 
             if action == "create":
                 result = await self._client.rpc("createwallet", params=[wallet])
-                return ToolResult(
-                    success=True, output=f"Created wallet '{result['name']}'."
-                )
+                return ToolResult(success=True, output=f"Created wallet '{result['name']}'.")
 
             if action == "load":
                 result = await self._client.rpc("loadwallet", params=[wallet])
-                return ToolResult(
-                    success=True, output=f"Loaded wallet '{result['name']}'."
-                )
+                return ToolResult(success=True, output=f"Loaded wallet '{result['name']}'.")
 
             if action == "unload":
                 await self._client.rpc("unloadwallet", params=[wallet])
@@ -400,7 +389,9 @@ Address types:
                 },
                 "wallet": {
                     "type": "string",
-                    "description": 'Wallet to generate the address from. Pass "" for the default wallet.',
+                    "description": (
+                        'Wallet to generate the address from. Pass "" for the default wallet.'
+                    ),
                 },
             },
             "required": [],
@@ -416,9 +407,7 @@ Address types:
             params.append(address_type)
 
         try:
-            address = await self._client.rpc(
-                "getnewaddress", params=params, wallet=wallet
-            )
+            address = await self._client.rpc("getnewaddress", params=params, wallet=wallet)
         except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
             return _rpc_error_result(e)
 
@@ -473,7 +462,11 @@ rather than on top."""
                 },
                 "subtract_fee_from_amount": {
                     "type": "boolean",
-                    "description": "If true, fee is deducted from the sent amount so the recipient gets exactly amount_sats minus fee. Defaults to false.",
+                    "description": (
+                        "If true, fee is deducted from the sent amount"
+                        " so the recipient gets exactly amount_sats"
+                        " minus fee. Defaults to false."
+                    ),
                 },
             },
             "required": ["address", "amount_sats"],
@@ -487,13 +480,9 @@ rather than on top."""
         subtract_fee = input.get("subtract_fee_from_amount", False)
 
         if not address:
-            return ToolResult(
-                success=False, error={"message": "'address' is required."}
-            )
+            return ToolResult(success=False, error={"message": "'address' is required."})
         if amount_sats is None:
-            return ToolResult(
-                success=False, error={"message": "'amount_sats' is required."}
-            )
+            return ToolResult(success=False, error={"message": "'amount_sats' is required."})
         if not isinstance(amount_sats, int):
             return ToolResult(
                 success=False,
@@ -555,24 +544,39 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
                 },
                 "address": {
                     "type": "string",
-                    "description": "Destination address for the consolidated output. Omit to generate a new wallet address.",
+                    "description": (
+                        "Destination address for the consolidated"
+                        " output. Omit to generate a new wallet address."
+                    ),
                 },
                 "min_confirmations": {
                     "type": "integer",
-                    "description": "Only include UTXOs with at least this many confirmations. Defaults to 1.",
+                    "description": (
+                        "Only include UTXOs with at least this many confirmations. Defaults to 1."
+                    ),
                     "default": 1,
                 },
                 "max_amount_sats": {
                     "type": "integer",
-                    "description": "Only consolidate UTXOs with an amount at or below this value in satoshis. E.g. pass 1000 to consolidate all UTXOs under 1000 sats.",
+                    "description": (
+                        "Only consolidate UTXOs with an amount at or"
+                        " below this value in satoshis. E.g. pass 1000"
+                        " to consolidate all UTXOs under 1000 sats."
+                    ),
                 },
                 "min_amount_sats": {
                     "type": "integer",
-                    "description": "Only consolidate UTXOs with an amount at or above this value in satoshis.",
+                    "description": (
+                        "Only consolidate UTXOs with an amount at or above this value in satoshis."
+                    ),
                 },
                 "outpoints": {
                     "type": "array",
-                    "description": 'Specific UTXOs to consolidate, as "txid:vout" strings. Omit to use all eligible UTXOs.',
+                    "description": (
+                        "Specific UTXOs to consolidate, as"
+                        ' "txid:vout" strings. Omit to use all'
+                        " eligible UTXOs."
+                    ),
                     "items": {"type": "string"},
                 },
             },
@@ -594,9 +598,7 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
                 label = f"wallet '{wallet}'" if wallet else "default wallet"
                 return ToolResult(
                     success=False,
-                    error={
-                        "message": f"No UTXOs with {min_conf}+ confirmations found in {label}."
-                    },
+                    error={"message": f"No UTXOs with {min_conf}+ confirmations found in {label}."},
                 )
 
             if outpoints:
@@ -617,7 +619,10 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
                     return ToolResult(
                         success=False,
                         error={
-                            "message": "None of the specified outpoints were found in the eligible UTXO set."
+                            "message": (
+                                "None of the specified outpoints were"
+                                " found in the eligible UTXO set."
+                            )
                         },
                     )
             else:
@@ -625,15 +630,11 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
 
             if max_amount_sats is not None:
                 selected = [
-                    u
-                    for u in selected
-                    if int(round(u["amount"] * 100_000_000)) <= max_amount_sats
+                    u for u in selected if int(round(u["amount"] * 100_000_000)) <= max_amount_sats
                 ]
             if min_amount_sats is not None:
                 selected = [
-                    u
-                    for u in selected
-                    if int(round(u["amount"] * 100_000_000)) >= min_amount_sats
+                    u for u in selected if int(round(u["amount"] * 100_000_000)) >= min_amount_sats
                 ]
 
             if not selected:
@@ -661,21 +662,20 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
                 wallet=wallet,
             )
 
-            txid = (
-                result.get("txid", str(result))
-                if isinstance(result, dict)
-                else str(result)
-            )
+            txid = result.get("txid", str(result)) if isinstance(result, dict) else str(result)
 
             lines = [
                 f"Consolidated {len(selected)} UTXO(s) \u2192 {address}",
                 f"Input total:  {total_sats:,} sats",
                 f"txid:         {txid}",
-                "\nFee deducted from output automatically. Run list_utxos after confirmation to see the final amount.",
+                "\nFee deducted from output automatically."
+                " Run list_utxos after confirmation to see"
+                " the final amount.",
             ]
             if len(selected) == 1:
                 lines.append(
-                    "\nNote: Only 1 UTXO was selected \u2014 this just moves funds to a new address."
+                    "\nNote: Only 1 UTXO was selected \u2014"
+                    " this just moves funds to a new address."
                 )
 
             return ToolResult(success=True, output="\n".join(lines))
@@ -712,11 +712,17 @@ first reward immediately spendable."""
             "properties": {
                 "num_blocks": {
                     "type": "integer",
-                    "description": "Number of blocks to mine. Mine 101+ to make coinbase spendable immediately.",
+                    "description": (
+                        "Number of blocks to mine. Mine 101+ to make"
+                        " coinbase spendable immediately."
+                    ),
                 },
                 "address": {
                     "type": "string",
-                    "description": "Address to send the coinbase reward to. Generate one with generate_address first.",
+                    "description": (
+                        "Address to send the coinbase reward to."
+                        " Generate one with generate_address first."
+                    ),
                 },
             },
             "required": ["num_blocks", "address"],
@@ -727,9 +733,7 @@ first reward immediately spendable."""
         address = input.get("address", "")
 
         if not address:
-            return ToolResult(
-                success=False, error={"message": "'address' is required."}
-            )
+            return ToolResult(success=False, error={"message": "'address' is required."})
         if not isinstance(num_blocks, int):
             return ToolResult(
                 success=False,
@@ -742,9 +746,7 @@ first reward immediately spendable."""
             )
 
         try:
-            block_hashes = await self._client.rpc(
-                "generatetoaddress", params=[num_blocks, address]
-            )
+            block_hashes = await self._client.rpc("generatetoaddress", params=[num_blocks, address])
         except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
             return _rpc_error_result(e)
 

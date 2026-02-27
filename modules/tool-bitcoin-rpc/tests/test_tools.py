@@ -5,7 +5,6 @@ network traffic is generated.  Each scenario follows Given/When/Then.
 """
 
 import pytest
-
 from amplifier_module_tool_bitcoin_rpc.tools import (
     ConsolidateUtxosTool,
     GenerateAddressTool,
@@ -15,7 +14,6 @@ from amplifier_module_tool_bitcoin_rpc.tools import (
     SendCoinsTool,
     SplitUtxosTool,
 )
-
 
 # ---------------------------------------------------------------------------
 # ListUtxosTool
@@ -332,9 +330,7 @@ async def test_mine_blocks_rejects_non_integer(mock_rpc_client):
 async def test_send_coins_rejects_non_integer_amount(mock_rpc_client):
     """Given amount_sats as a string instead of int, return an error."""
     tool = SendCoinsTool(mock_rpc_client)
-    result = await tool.execute(
-        {"address": "bcrt1qdest", "amount_sats": "one thousand"}
-    )
+    result = await tool.execute({"address": "bcrt1qdest", "amount_sats": "one thousand"})
 
     assert not result.success
     assert "'amount_sats' must be an integer" in result.error["message"]

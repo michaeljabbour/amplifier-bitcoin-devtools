@@ -7,9 +7,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 import respx
-
-from amplifier_module_tool_lnd.client import LndClient, load_macaroon, lnd_error
-
+from amplifier_module_tool_lnd.client import LndClient, lnd_error, load_macaroon
 from conftest import make_test_client
 
 BASE_URL = "https://localhost:8080"
@@ -73,9 +71,7 @@ async def test_post_sends_correct_headers():
 @respx.mock
 async def test_raises_on_http_error():
     """403 response must raise HTTPStatusError."""
-    respx.get(f"{BASE_URL}/v1/getinfo").mock(
-        return_value=httpx.Response(403, text="forbidden")
-    )
+    respx.get(f"{BASE_URL}/v1/getinfo").mock(return_value=httpx.Response(403, text="forbidden"))
 
     client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     with pytest.raises(httpx.HTTPStatusError):
@@ -161,9 +157,8 @@ async def test_get_logs_error_on_http_failure(caplog):
     )
 
     client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(httpx.HTTPStatusError):
-            await client.get("/v1/getinfo")
+    with caplog.at_level(logging.ERROR), pytest.raises(httpx.HTTPStatusError):
+        await client.get("/v1/getinfo")
     assert "LND error" in caplog.text
     assert "/v1/getinfo" in caplog.text
     assert "500" in caplog.text
@@ -176,14 +171,11 @@ async def test_post_logs_error_on_http_failure(caplog):
     """POST that returns 403 must log at ERROR level before raising."""
     import logging
 
-    respx.post(f"{BASE_URL}/v1/invoices").mock(
-        return_value=httpx.Response(403, text="forbidden")
-    )
+    respx.post(f"{BASE_URL}/v1/invoices").mock(return_value=httpx.Response(403, text="forbidden"))
 
     client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(httpx.HTTPStatusError):
-            await client.post("/v1/invoices", json={"value": 1000})
+    with caplog.at_level(logging.ERROR), pytest.raises(httpx.HTTPStatusError):
+        await client.post("/v1/invoices", json={"value": 1000})
     assert "LND error" in caplog.text
     assert "/v1/invoices" in caplog.text
     assert "403" in caplog.text

@@ -11,7 +11,6 @@ import json
 import httpx
 import pytest
 import respx
-
 from _helpers import RPC_URL
 
 

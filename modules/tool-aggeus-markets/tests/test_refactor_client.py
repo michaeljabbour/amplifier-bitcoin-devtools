@@ -17,7 +17,6 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-
 CLIENT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
     "amplifier_module_tool_aggeus_markets/client.py"
 )
@@ -315,8 +314,8 @@ def test_build_signed_event_without_signing_key_raises_runtime_error():
     assert statements are stripped by python -O, so security-sensitive
     precondition checks must use proper exceptions.
     """
-    from amplifier_module_tool_aggeus_markets.client import NostrClient
     import pytest
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
 
     client = NostrClient("ws://localhost:8080", None, "bb" * 32)
     with pytest.raises(RuntimeError, match="No signing key configured"):

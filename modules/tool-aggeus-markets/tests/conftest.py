@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Stub installation -- prefer real libraries, fall back to stubs
 # ---------------------------------------------------------------------------

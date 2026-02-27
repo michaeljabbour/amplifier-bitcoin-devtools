@@ -80,9 +80,7 @@ async def test_split_utxos_getnewaddress_http_error_uses_rpc_format():
     from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
     from amplifier_module_tool_bitcoin_rpc.tools import SplitUtxosTool
 
-    respx.post(RPC_URL).mock(
-        return_value=httpx.Response(500, text="Internal Server Error")
-    )
+    respx.post(RPC_URL).mock(return_value=httpx.Response(500, text="Internal Server Error"))
 
     client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
     tool = SplitUtxosTool(client)
@@ -122,9 +120,7 @@ async def test_manage_wallet_missing_action_returns_clear_error():
     assert "'action'" in msg and "required" in msg.lower(), (
         f"Expected error about missing 'action' field but got: {msg}"
     )
-    assert "'wallet'" not in msg, (
-        f"Error should be about missing 'action', not 'wallet': {msg}"
-    )
+    assert "'wallet'" not in msg, f"Error should be about missing 'action', not 'wallet': {msg}"
 
 
 # ---------------------------------------------------------------------------
@@ -148,15 +144,16 @@ def test_mine_blocks_uses_explicit_none_check():
                 continue
             # Look for `not num_blocks` pattern in the AST
             for child in ast.walk(item):
-                if isinstance(child, ast.UnaryOp) and isinstance(child.op, ast.Not):
-                    if (
-                        isinstance(child.operand, ast.Name)
-                        and child.operand.id == "num_blocks"
-                    ):
-                        pytest.fail(
-                            "MineBlocksTool.execute() uses 'not num_blocks' which "
-                            "conflates None and 0. Use 'num_blocks is None or "
-                            "num_blocks < 1' for explicit check."
-                        )
+                if (
+                    isinstance(child, ast.UnaryOp)
+                    and isinstance(child.op, ast.Not)
+                    and isinstance(child.operand, ast.Name)
+                    and child.operand.id == "num_blocks"
+                ):
+                    pytest.fail(
+                        "MineBlocksTool.execute() uses 'not num_blocks' which "
+                        "conflates None and 0. Use 'num_blocks is None or "
+                        "num_blocks < 1' for explicit check."
+                    )
             return  # Found and checked execute; done
     pytest.fail("MineBlocksTool.execute() not found in tools.py")

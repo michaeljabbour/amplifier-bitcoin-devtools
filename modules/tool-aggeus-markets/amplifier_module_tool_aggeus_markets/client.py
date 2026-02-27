@@ -26,9 +26,7 @@ PROTOCOL_VERSION = 1
 # ---------------------------------------------------------------------------
 
 
-def _nostr_event_id(
-    pubkey: str, created_at: int, kind: int, tags: list, content: str
-) -> str:
+def _nostr_event_id(pubkey: str, created_at: int, kind: int, tags: list, content: str) -> str:
     """SHA256 of the canonical NIP-01 commitment array."""
     commitment = json.dumps(
         [0, pubkey, created_at, kind, tags, content],
@@ -145,9 +143,7 @@ class NostrClient:
 
     # -- Relay I/O -----------------------------------------------------------
 
-    async def query_relay(
-        self, filters: dict[str, Any], timeout: float = 10.0
-    ) -> list[dict]:
+    async def query_relay(self, filters: dict[str, Any], timeout: float = 10.0) -> list[dict]:
         """Send a REQ to the Nostr relay and collect events until EOSE."""
         logger.debug("Nostr query: %s filters=%s", self._relay_url, filters)
 
@@ -168,7 +164,7 @@ class NostrClient:
 
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         break
 
                     try:
@@ -190,9 +186,7 @@ class NostrClient:
                     logger.debug("Failed to send CLOSE: %s", exc)
 
         except OSError as exc:
-            raise ConnectionError(
-                f"Cannot connect to relay {self._relay_url}: {exc}"
-            ) from exc
+            raise ConnectionError(f"Cannot connect to relay {self._relay_url}: {exc}") from exc
 
         logger.debug("Nostr received %d events", len(events))
 
@@ -200,9 +194,7 @@ class NostrClient:
 
     async def publish_event(self, event: dict, timeout: float = 10.0) -> str:
         """Publish a signed Nostr event; return a human-readable relay response."""
-        logger.debug(
-            "Nostr publish: kind=%d to %s", event.get("kind", 0), self._relay_url
-        )
+        logger.debug("Nostr publish: kind=%d to %s", event.get("kind", 0), self._relay_url)
 
         try:
             async with websockets.connect(self._relay_url, open_timeout=5) as ws:
@@ -218,7 +210,7 @@ class NostrClient:
 
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         return "timeout \u2014 relay did not acknowledge"
 
                     try:
@@ -236,9 +228,7 @@ class NostrClient:
                         return "accepted" if accepted else f"rejected: {note}"
 
         except OSError as exc:
-            raise ConnectionError(
-                f"Cannot connect to relay {self._relay_url}: {exc}"
-            ) from exc
+            raise ConnectionError(f"Cannot connect to relay {self._relay_url}: {exc}") from exc
 
         return "no response"
 
