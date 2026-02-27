@@ -78,6 +78,8 @@ invoice that lets the payer choose."""
 
     async def execute(self, params: dict[str, Any]) -> ToolResult:
         body: dict[str, Any] = {}
+        # Intentional falsy-filtering: amt_sats=0 means "any-amount invoice"
+        # and empty memo is omitted. Both are correct per LND semantics.
         if amt := params.get("amt_sats"):
             body["value"] = amt
         if memo := params.get("memo"):

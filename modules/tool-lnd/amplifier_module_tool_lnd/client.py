@@ -96,5 +96,5 @@ def lnd_error(response: httpx.Response) -> str:
     """Extract a human-readable error message from an LND response."""
     try:
         return response.json().get("message", response.text)
-    except Exception:
+    except (ValueError, KeyError):
         return response.text

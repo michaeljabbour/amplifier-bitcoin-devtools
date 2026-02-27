@@ -9,7 +9,9 @@ Verifies:
 6. Validates tls_cert and macaroon_path are present
 """
 
+import asyncio
 import ast
+import inspect
 import pathlib
 import tempfile
 
@@ -57,12 +59,10 @@ def test_init_imports_from_client_and_tools():
     """__init__.py must import from .client and .tools."""
     source = INIT_SRC.read_text()
     has_client_import = (
-        "from .client" in source
-        or "from amplifier_module_tool_lnd.client" in source
+        "from .client" in source or "from amplifier_module_tool_lnd.client" in source
     )
     has_tools_import = (
-        "from .tools" in source
-        or "from amplifier_module_tool_lnd.tools" in source
+        "from .tools" in source or "from amplifier_module_tool_lnd.tools" in source
     )
     assert has_client_import, "__init__.py must import from .client"
     assert has_tools_import, "__init__.py must import from .tools"
@@ -94,8 +94,6 @@ def test_no_tool_classes_in_init():
 @pytest.mark.asyncio
 async def test_mount_returns_cleanup_function():
     """mount() must return a cleanup callable."""
-    import asyncio
-    import inspect
     import os
 
     from amplifier_module_tool_lnd import mount
@@ -110,9 +108,7 @@ async def test_mount_returns_cleanup_function():
     coordinator = MockCoordinator()
 
     # Create a temp macaroon file
-    with tempfile.NamedTemporaryFile(
-        suffix=".macaroon", delete=False
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".macaroon", delete=False) as tmp:
         tmp.write(b"\xde\xad\xbe\xef")
         macaroon_path = tmp.name
 
