@@ -131,3 +131,18 @@ async def test_create_market_requires_question(signing_client):
 
     assert result.success is False
     assert "question" in result.error["message"]
+
+
+# ---------------------------------------------------------------------------
+# Input validation — type-checking guards
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_market_rejects_non_string_question(signing_client):
+    """GIVEN question as an integer WHEN creating THEN returns type error."""
+    tool = CreateMarketTool(signing_client)
+    result = await tool.execute({"question": 42, "resolution_block": 850000})
+
+    assert result.success is False
+    assert "'question' must be a string" in result.error["message"]

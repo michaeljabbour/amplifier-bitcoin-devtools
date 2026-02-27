@@ -225,3 +225,18 @@ async def test_pay_invoice_requires_payment_request(mock_lnd_client):
 
     assert result.success is False
     assert "payment_request" in result.error["message"]
+
+
+# ---------------------------------------------------------------------------
+# Input validation — type-checking guards
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_pay_invoice_requires_non_empty_string(mock_lnd_client):
+    """GIVEN payment_request as an integer WHEN paying THEN returns type error."""
+    tool = PayInvoiceTool(mock_lnd_client)
+    result = await tool.execute({"payment_request": 12345})
+
+    assert result.success is False
+    assert "'payment_request' must be a non-empty string" in result.error["message"]

@@ -178,6 +178,10 @@ class SplitUtxosTool:
 
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         outputs_spec = input.get("outputs", [])
+        if not isinstance(outputs_spec, list):
+            return ToolResult(
+                success=False, error={"message": "'outputs' must be an array."}
+            )
         wallet = input.get("wallet", "")
         default_address = input.get("address")
 
@@ -490,6 +494,11 @@ rather than on top."""
             return ToolResult(
                 success=False, error={"message": "'amount_sats' is required."}
             )
+        if not isinstance(amount_sats, int):
+            return ToolResult(
+                success=False,
+                error={"message": "'amount_sats' must be an integer."},
+            )
 
         btc_amount = round(amount_sats / 100_000_000, 8)
 
@@ -720,6 +729,11 @@ first reward immediately spendable."""
         if not address:
             return ToolResult(
                 success=False, error={"message": "'address' is required."}
+            )
+        if not isinstance(num_blocks, int):
+            return ToolResult(
+                success=False,
+                error={"message": "'num_blocks' must be an integer."},
             )
         if num_blocks is None or num_blocks < 1:
             return ToolResult(

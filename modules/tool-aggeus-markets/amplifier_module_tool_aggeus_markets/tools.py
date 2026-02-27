@@ -367,7 +367,13 @@ to settle the market (the winning preimage unlocks the Lightning payments)."""
         }
 
     async def execute(self, input: dict[str, Any]) -> ToolResult:
-        question = input.get("question", "").strip()
+        question = input.get("question", "")
+        if not isinstance(question, str):
+            return ToolResult(
+                success=False,
+                error={"message": "'question' must be a string."},
+            )
+        question = question.strip()
         if not question:
             return ToolResult(
                 success=False, error={"message": "'question' is required."}

@@ -25,7 +25,13 @@ async def mount(
 
     host = config.get("rpc_host") or os.environ.get("BITCOIN_RPC_HOST", "127.0.0.1")
     port = config.get("rpc_port") or os.environ.get("BITCOIN_RPC_PORT", "8332")
-    user, password = load_credentials(config)
+    try:
+        user, password = load_credentials(config)
+    except (KeyError, ValueError) as e:
+        raise ValueError(
+            "Bitcoin RPC credentials not configured. Set BITCOIN_COOKIE_FILE"
+            f" or both BITCOIN_RPC_USER and BITCOIN_RPC_PASSWORD. Details: {e}"
+        ) from e
 
     client = BitcoinRpcClient(f"http://{host}:{port}", user, password)
 

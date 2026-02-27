@@ -301,3 +301,40 @@ async def test_mine_blocks_requires_address(mock_rpc_client):
 
     assert not result.success
     assert "'address' is required" in result.error["message"]
+
+
+# ---------------------------------------------------------------------------
+# Input validation — type-checking guards
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_split_utxos_rejects_non_array_outputs(mock_rpc_client):
+    """Given outputs as a string instead of a list, return an error."""
+    tool = SplitUtxosTool(mock_rpc_client)
+    result = await tool.execute({"outputs": "not-a-list"})
+
+    assert not result.success
+    assert "'outputs' must be an array" in result.error["message"]
+
+
+@pytest.mark.asyncio
+async def test_mine_blocks_rejects_non_integer(mock_rpc_client):
+    """Given num_blocks as a string instead of int, return an error."""
+    tool = MineBlocksTool(mock_rpc_client)
+    result = await tool.execute({"num_blocks": "five", "address": "bcrt1qminer"})
+
+    assert not result.success
+    assert "'num_blocks' must be an integer" in result.error["message"]
+
+
+@pytest.mark.asyncio
+async def test_send_coins_rejects_non_integer_amount(mock_rpc_client):
+    """Given amount_sats as a string instead of int, return an error."""
+    tool = SendCoinsTool(mock_rpc_client)
+    result = await tool.execute(
+        {"address": "bcrt1qdest", "amount_sats": "one thousand"}
+    )
+
+    assert not result.success
+    assert "'amount_sats' must be an integer" in result.error["message"]

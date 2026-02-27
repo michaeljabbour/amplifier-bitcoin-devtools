@@ -382,11 +382,17 @@ Use `timeout_seconds` to override the payment timeout (default: 60 seconds)."""
         }
 
     async def execute(self, params: dict[str, Any]) -> ToolResult:
-        payment_request = params.get("payment_request", "").strip()
+        payment_request = params.get("payment_request", "")
+        if not isinstance(payment_request, str) or not payment_request:
+            return ToolResult(
+                success=False,
+                error={"message": "'payment_request' must be a non-empty string."},
+            )
+        payment_request = payment_request.strip()
         if not payment_request:
             return ToolResult(
                 success=False,
-                error={"message": "'payment_request' is required."},
+                error={"message": "'payment_request' must be a non-empty string."},
             )
 
         fee_limit_sats = int(params.get("fee_limit_sats", 1000))
