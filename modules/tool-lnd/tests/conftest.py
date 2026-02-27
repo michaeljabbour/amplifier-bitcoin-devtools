@@ -2,8 +2,16 @@
 
 import sys
 import types
+from pathlib import Path
+from unittest.mock import AsyncMock
 
 import httpx
+import pytest
+
+# With tests/__init__.py present, the tests/ dir becomes a package and
+# ``from conftest import ...`` stops working.  Adding it to sys.path
+# restores that import for every test module.
+sys.path.insert(0, str(Path(__file__).parent))
 
 
 def _install_amplifier_core_stub() -> None:
@@ -47,3 +55,14 @@ def make_test_client(lnd_client):
         timeout=30.0,
     )
     return lnd_client
+
+
+@pytest.fixture
+def mock_lnd_client():
+    """LndClient with get() and post() replaced by AsyncMock."""
+    from amplifier_module_tool_lnd.client import LndClient
+
+    client = LndClient("https://localhost:8080", "/tmp/tls.cert", "deadbeef")
+    client.get = AsyncMock()
+    client.post = AsyncMock()
+    return client
