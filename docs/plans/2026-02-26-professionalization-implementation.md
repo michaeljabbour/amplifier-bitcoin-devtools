@@ -50,6 +50,15 @@ Expected: Branch `professional` set up to track remote branch.
 
 ### Task 2: Fix race condition in ConsolidateUtxosTool
 
+> **REVIEWER NOTE:** Spec review loop exhausted its 3-iteration budget before converging.
+> The final verdict was **APPROVED** — all 5 spec requirements verified, tests pass (3/3),
+> and `ast.parse` confirms clean syntax. However, the implementation includes **extra changes
+> not in the original spec**: (1) auto-formatter whitespace/line-wrapping changes across the
+> entire file, (2) a string quote style change in `GenerateAddressTool.input_schema`, and
+> (3) new test infrastructure files (`tests/__init__.py`, `tests/conftest.py`). The formatting
+> changes are cosmetic (no behavioral impact) and the test files are necessary scaffolding,
+> but please verify these are acceptable during the approval gate.
+
 The `execute()` method at line 729 writes `self._wallet_url` — an instance attribute that gets mutated on every call. If two concurrent calls happen with different wallets, the second call's wallet URL overwrites the first's. The `_rpc()` method at line 710 reads `url or self._wallet_url`, so any call to `_rpc()` without an explicit URL gets the wrong wallet.
 
 **Files:**
@@ -271,6 +280,21 @@ a clear HTTP error. Matches the pattern in all other _rpc methods."
 ## Phase 3: Refactoring
 
 ### Task 5: Refactor tool-bitcoin-rpc into client.py + tools.py + __init__.py
+
+> **REVIEWER NOTE:** Quality review loop exhausted its 3-iteration budget before converging.
+> The final verdict was **APPROVED** — all acceptance criteria verified (three files exist,
+> `ast.parse` clean, 51/51 tests pass, `ruff` clean). However, the quality reviewer noted
+> four cosmetic suggestions that were not addressed before the loop budget ran out:
+> (1) `SplitUtxosTool.execute()` has two error-handling blocks that catch exceptions inline
+> instead of using the shared `_rpc_error_result()` helper — works correctly but is slightly
+> less uniform than the other tools. (2) `ManageWalletTool.execute()` uses `input.get("action")`
+> without a dedicated "missing required field" message — works because the input schema already
+> declares `action` as required. (3) `MineBlocksTool` validation uses `not num_blocks` which
+> is truthy-falsy for both `None` and `0` — works because `num_blocks < 1` catches zero, but
+> `if num_blocks is None or num_blocks < 1` would read cleaner. (4) Minor test overlap between
+> earlier task tests and refactor tests (intentional — earlier task tests preserved alongside
+> refactor tests). None of these are bugs or behavioral issues. Please verify these cosmetic
+> items are acceptable during the approval gate.
 
 Split the 953-line monolith into three files following Amplifier's Pattern B (client-holding).
 
@@ -1293,30 +1317,45 @@ Follows Amplifier canonical Pattern B (tool-lsp, provider-ollama)."
 
 ### Task 6: Refactor tool-lnd into client.py + tools.py + __init__.py
 
+> **REVIEWER NOTE:** Quality review loop exhausted its 3-iteration budget before converging.
+> The final verdict was **APPROVED** — all acceptance criteria verified (three files exist,
+> `ast.parse` clean, 40/40 tests pass, `python_check` clean except expected `reportMissingImports`
+> for `amplifier_core`). However, the quality reviewer noted four cosmetic suggestions that
+> were not addressed before the loop budget ran out: (1) `client.py:51-55, 72-77` — the `get()`
+> and `post()` methods build a `kwargs` dict conditionally to pass optional `params`/`json`/`timeout`;
+> works correctly and is explicit, but could pass them directly since httpx handles `None` gracefully.
+> (2) `tools.py:87` — `expiry` uses walrus+falsy filtering; `expiry=0` would be silently dropped,
+> but 0-second expiry is nonsensical per LND semantics (comment on lines 81-83 explains the
+> intentional falsy-filtering for `amt_sats` and `memo` but could mention `expiry` too).
+> (3) `test_refactor_init.py:97,203` — `os` and `tempfile` imported inside test functions instead
+> of at top level (now moved to top in final version). (4) `conftest.py:42` — `verify=False` in
+> `make_test_client` is intentional for tests (documented in docstring). None of these are bugs
+> or behavioral issues. The implementation includes an excellent DRY improvement over the original
+> plan: a shared `_lnd_request()` helper that centralizes all httpx error handling across all 6
+> tools. Please verify these cosmetic items are acceptable during the approval gate.
+
 Split the 487-line monolith into three files following the same Pattern B.
 
 **Files:**
 - Create: `modules/tool-lnd/amplifier_module_tool_lnd/client.py`
 - Create: `modules/tool-lnd/amplifier_module_tool_lnd/tools.py`
 - Rewrite: `modules/tool-lnd/amplifier_module_tool_lnd/__init__.py`
+- Test: `modules/tool-lnd/tests/test_refactor_client.py`
+- Test: `modules/tool-lnd/tests/test_refactor_tools.py`
+- Test: `modules/tool-lnd/tests/test_refactor_init.py`
+- Test: `modules/tool-lnd/tests/conftest.py`
 
 **Step 1: Create client.py**
 
 Create `modules/tool-lnd/amplifier_module_tool_lnd/client.py`:
 
 ```python
-"""LND REST API client — shared transport for all LND tools."""
+"""LND REST API client with lazy connection and TLS+macaroon auth."""
 
-from __future__ import annotations
-
-import logging
 from typing import Any
 
 import httpx
 
-logger = logging.getLogger(__name__)
-
-# Canonical invoice state labels used by ListInvoicesTool and LookupInvoiceTool.
 INVOICE_STATE_LABELS: dict[str, str] = {
     "OPEN": "open",
     "SETTLED": "settled",
@@ -1326,24 +1365,22 @@ INVOICE_STATE_LABELS: dict[str, str] = {
 
 
 class LndClient:
-    """Thin wrapper around the LND REST API.
+    """Thin async client for the LND REST API.
 
-    Holds a lazy-initialized ``httpx.AsyncClient`` configured with TLS
-    certificate verification and macaroon authentication.
+    Holds a single httpx.AsyncClient (lazy-initialized on first call)
+    configured with TLS certificate verification and macaroon authentication.
     """
 
-    def __init__(self, rest_url: str, tls_cert: str, macaroon_hex: str) -> None:
-        self._rest_url = rest_url
+    def __init__(self, base_url: str, tls_cert: str, macaroon_hex: str) -> None:
+        self._base_url = base_url
         self._tls_cert = tls_cert
         self._macaroon_hex = macaroon_hex
         self._client: httpx.AsyncClient | None = None
 
-    @property
-    def _http(self) -> httpx.AsyncClient:
-        """Lazy-create the shared HTTP client on first use."""
+    def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
-                base_url=self._rest_url,
+                base_url=self._base_url,
                 verify=self._tls_cert,
                 headers={"Grpc-Metadata-Macaroon": self._macaroon_hex},
                 timeout=30.0,
@@ -1354,15 +1391,21 @@ class LndClient:
         self,
         path: str,
         params: dict[str, Any] | None = None,
-        timeout: float = 30.0,
-    ) -> dict:
-        """Send a GET request to the LND REST API.
+        timeout: float | None = None,
+    ) -> Any:
+        """Send a GET request and return the parsed JSON response.
 
         Raises:
-            httpx.HTTPStatusError: On non-2xx HTTP responses.
-            httpx.RequestError: On connection failures.
+            httpx.HTTPStatusError: on non-2xx HTTP response
+            httpx.RequestError: on connection failure
         """
-        response = await self._http.get(path, params=params, timeout=timeout)
+        client = self._ensure_client()
+        kwargs: dict[str, Any] = {}
+        if params is not None:
+            kwargs["params"] = params
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        response = await client.get(path, **kwargs)
         response.raise_for_status()
         return response.json()
 
@@ -1370,54 +1413,88 @@ class LndClient:
         self,
         path: str,
         json: dict[str, Any] | None = None,
-        timeout: float = 30.0,
-    ) -> dict:
-        """Send a POST request to the LND REST API.
+        timeout: float | None = None,
+    ) -> Any:
+        """Send a POST request and return the parsed JSON response.
 
         Raises:
-            httpx.HTTPStatusError: On non-2xx HTTP responses.
-            httpx.RequestError: On connection failures.
+            httpx.HTTPStatusError: on non-2xx HTTP response
+            httpx.RequestError: on connection failure
         """
-        response = await self._http.post(path, json=json, timeout=timeout)
+        client = self._ensure_client()
+        kwargs: dict[str, Any] = {}
+        if json is not None:
+            kwargs["json"] = json
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        response = await client.post(path, **kwargs)
         response.raise_for_status()
         return response.json()
 
     async def close(self) -> None:
-        """Shut down the underlying HTTP transport."""
+        """Close the underlying HTTP client if it was created."""
         if self._client is not None:
             await self._client.aclose()
             self._client = None
 
 
 def load_macaroon(path: str) -> str:
-    """Read a macaroon file and return its hex encoding."""
+    """Read a binary macaroon file and return its hex encoding."""
     with open(path, "rb") as f:
         return f.read().hex()
 
 
 def lnd_error(response: httpx.Response) -> str:
-    """Extract a human-readable error message from an LND error response."""
+    """Extract a human-readable error message from an LND response."""
     try:
         return response.json().get("message", response.text)
-    except Exception:
+    except (ValueError, KeyError):
         return response.text
 ```
 
 **Step 2: Create tools.py**
 
-Create `modules/tool-lnd/amplifier_module_tool_lnd/tools.py`:
+Create `modules/tool-lnd/amplifier_module_tool_lnd/tools.py`.
+
+Note: The implementation introduces a DRY `_lnd_request()` helper that centralizes
+httpx error handling for all 6 tools, eliminating duplicated try/except blocks:
 
 ```python
-"""LND Lightning tools — thin wrappers that delegate to LndClient."""
+"""LND REST API tool classes.
 
-from __future__ import annotations
+Each tool receives a shared ``LndClient`` instance and delegates
+all network I/O through its ``get()`` and ``post()`` methods.
+"""
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 from amplifier_core import ToolResult
 
 from .client import INVOICE_STATE_LABELS, LndClient, lnd_error
+
+
+async def _lnd_request(coro: Callable[[], Awaitable[Any]]) -> ToolResult | Any:
+    """Execute an LND client call with standard error handling.
+
+    Returns the parsed JSON data on success, or a failed ``ToolResult``
+    on HTTP or connection errors.
+    """
+    try:
+        return await coro()
+    except httpx.HTTPStatusError as e:
+        return ToolResult(
+            success=False,
+            error={
+                "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
+            },
+        )
+    except httpx.RequestError as e:
+        return ToolResult(
+            success=False,
+            error={"message": f"Could not reach LND node: {e}"},
+        )
 
 
 class CreateInvoiceTool:
@@ -1461,27 +1538,24 @@ invoice that lets the payer choose."""
             "required": [],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
         body: dict[str, Any] = {}
-        if amt := input.get("amt_sats"):
+        # Intentional falsy-filtering: amt_sats=0 means "any-amount invoice",
+        # empty memo is omitted, and expiry=0 is nonsensical. All three are
+        # correct to drop per LND semantics.
+        if amt := params.get("amt_sats"):
             body["value"] = amt
-        if memo := input.get("memo"):
+        if memo := params.get("memo"):
             body["memo"] = memo
-        if expiry := input.get("expiry"):
+        if expiry := params.get("expiry"):
             body["expiry"] = str(expiry)
 
-        try:
-            data = await self._client.post("/v1/invoices", json=body)
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"},
-            )
-        except httpx.RequestError:
-            return ToolResult(
-                success=False,
-                error={"message": "Could not reach LND node"},
-            )
+        result = await _lnd_request(
+            lambda: self._client.post("/v1/invoices", json=body)
+        )
+        if isinstance(result, ToolResult):
+            return result
+        data = result
 
         payment_request = data.get("payment_request", "")
         r_hash = data.get("r_hash", "")
@@ -1495,12 +1569,12 @@ invoice that lets the payer choose."""
             "",
             f"Payment hash: {r_hash}",
         ]
-        amt_sats = input.get("amt_sats", 0)
+        amt_sats = params.get("amt_sats", 0)
         if amt_sats:
             lines.append(f"Amount:       {amt_sats:,} sats")
         else:
-            lines.append("Amount:       (any — payer chooses)")
-        if memo := input.get("memo"):
+            lines.append("Amount:       (any \u2014 payer chooses)")
+        if memo := params.get("memo"):
             lines.append(f"Memo:         {memo}")
 
         return ToolResult(success=True, output="\n".join(lines))
@@ -1542,26 +1616,20 @@ Pass `pending_only=true` to show only open (unpaid) invoices."""
             "required": [],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        params: dict[str, Any] = {
-            "num_max_invoices": input.get("max_invoices", 100),
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        query: dict[str, Any] = {
+            "num_max_invoices": params.get("max_invoices", 100),
             "reversed": True,
         }
-        if input.get("pending_only"):
-            params["pending_only"] = True
+        if params.get("pending_only"):
+            query["pending_only"] = True
 
-        try:
-            data = await self._client.get("/v1/invoices", params=params)
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"},
-            )
-        except httpx.RequestError:
-            return ToolResult(
-                success=False,
-                error={"message": "Could not reach LND node"},
-            )
+        result = await _lnd_request(
+            lambda: self._client.get("/v1/invoices", params=query)
+        )
+        if isinstance(result, ToolResult):
+            return result
+        data = result
 
         invoices = data.get("invoices", [])
         if not invoices:
@@ -1578,12 +1646,8 @@ Pass `pending_only=true` to show only open (unpaid) invoices."""
                 inv.get("state", ""), inv.get("state", "?")
             )
             r_hash = inv.get("r_hash", "")
-            short_hash = (
-                f"{r_hash[:8]}..{r_hash[-4:]}" if len(r_hash) > 12 else r_hash
-            )
-            lines.append(
-                f"| {idx} | {amt:,} | {memo} | {state} | {short_hash} |"
-            )
+            short_hash = f"{r_hash[:8]}..{r_hash[-4:]}" if len(r_hash) > 12 else r_hash
+            lines.append(f"| {idx} | {amt:,} | {memo} | {state} | {short_hash} |")
 
         return ToolResult(success=True, output="\n".join(lines))
 
@@ -1620,36 +1684,25 @@ Returns the invoice's amount, memo, status, and full payment request."""
             "required": ["r_hash"],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        r_hash = input.get("r_hash", "").strip()
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        r_hash = params.get("r_hash", "").strip()
         if not r_hash:
-            return ToolResult(
-                success=False, error={"message": "'r_hash' is required."}
-            )
+            return ToolResult(success=False, error={"message": "'r_hash' is required."})
 
-        try:
-            inv = await self._client.get(f"/v1/invoice/{r_hash}")
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"},
-            )
-        except httpx.RequestError:
-            return ToolResult(
-                success=False,
-                error={"message": "Could not reach LND node"},
-            )
+        result = await _lnd_request(lambda: self._client.get(f"/v1/invoice/{r_hash}"))
+        if isinstance(result, ToolResult):
+            return result
+        inv = result
 
-        status = INVOICE_STATE_LABELS.get(
-            inv.get("state", ""), inv.get("state", "?")
-        )
+        raw_state: str = inv.get("state", "?")
+        status: str = INVOICE_STATE_LABELS.get(raw_state) or raw_state
         amt = int(inv.get("value", 0))
         memo = inv.get("memo", "") or "(none)"
         payment_request = inv.get("payment_request", "")
         amt_paid = int(inv.get("amt_paid_sat", 0))
 
         lines = [
-            f"Invoice #{inv.get('add_index', '?')}  —  {status.upper()}",
+            f"Invoice #{inv.get('add_index', '?')}  \u2014  {status.upper()}",
             f"Amount:   {amt:,} sats",
             f"Memo:     {memo}",
         ]
@@ -1681,19 +1734,11 @@ number of active channels, and sync status."""
     def input_schema(self) -> dict:
         return {"type": "object", "properties": {}, "required": []}
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        try:
-            info = await self._client.get("/v1/getinfo")
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"},
-            )
-        except httpx.RequestError:
-            return ToolResult(
-                success=False,
-                error={"message": "Could not reach LND node"},
-            )
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        result = await _lnd_request(lambda: self._client.get("/v1/getinfo"))
+        if isinstance(result, ToolResult):
+            return result
+        info = result
 
         network = (info.get("chains") or [{}])[0].get("network", "?")
         lines = [
@@ -1730,25 +1775,15 @@ send), remote balance (funds it can receive), and any pending amounts."""
     def input_schema(self) -> dict:
         return {"type": "object", "properties": {}, "required": []}
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        try:
-            bal = await self._client.get("/v1/balance/channels")
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"},
-            )
-        except httpx.RequestError:
-            return ToolResult(
-                success=False,
-                error={"message": "Could not reach LND node"},
-            )
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        result = await _lnd_request(lambda: self._client.get("/v1/balance/channels"))
+        if isinstance(result, ToolResult):
+            return result
+        bal = result
 
         local_sat = int((bal.get("local_balance") or {}).get("sat", 0))
         remote_sat = int((bal.get("remote_balance") or {}).get("sat", 0))
-        pending_local = int(
-            (bal.get("pending_open_local_balance") or {}).get("sat", 0)
-        )
+        pending_local = int((bal.get("pending_open_local_balance") or {}).get("sat", 0))
         pending_remote = int(
             (bal.get("pending_open_remote_balance") or {}).get("sat", 0)
         )
@@ -1758,12 +1793,8 @@ send), remote balance (funds it can receive), and any pending amounts."""
             f"Remote balance (receivable): {remote_sat:>12,} sats",
         ]
         if pending_local or pending_remote:
-            lines.append(
-                f"Pending local:               {pending_local:>12,} sats"
-            )
-            lines.append(
-                f"Pending remote:              {pending_remote:>12,} sats"
-            )
+            lines.append(f"Pending local:               {pending_local:>12,} sats")
+            lines.append(f"Pending remote:              {pending_remote:>12,} sats")
 
         return ToolResult(success=True, output="\n".join(lines))
 
@@ -1812,38 +1843,32 @@ Use `timeout_seconds` to override the payment timeout (default: 60 seconds)."""
             "required": ["payment_request"],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        payment_request = input.get("payment_request", "").strip()
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        payment_request = params.get("payment_request", "").strip()
         if not payment_request:
             return ToolResult(
                 success=False,
                 error={"message": "'payment_request' is required."},
             )
 
-        fee_limit_sats = int(input.get("fee_limit_sats", 1000))
-        timeout_seconds = int(input.get("timeout_seconds", 60))
+        fee_limit_sats = int(params.get("fee_limit_sats", 1000))
+        timeout_seconds = int(params.get("timeout_seconds", 60))
 
         body: dict[str, Any] = {
             "payment_request": payment_request,
             "fee_limit": {"fixed": fee_limit_sats},
         }
 
-        try:
-            data = await self._client.post(
+        result = await _lnd_request(
+            lambda: self._client.post(
                 "/v1/channels/transactions",
                 json=body,
                 timeout=timeout_seconds + 10.0,
             )
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"},
-            )
-        except httpx.RequestError:
-            return ToolResult(
-                success=False,
-                error={"message": "Could not reach LND node"},
-            )
+        )
+        if isinstance(result, ToolResult):
+            return result
+        data = result
 
         payment_error = data.get("payment_error", "")
         if payment_error:
@@ -1874,11 +1899,8 @@ Use `timeout_seconds` to override the payment timeout (default: 60 seconds)."""
 Replace `modules/tool-lnd/amplifier_module_tool_lnd/__init__.py` entirely:
 
 ```python
-"""LND Lightning tools — Amplifier module entry point."""
+"""LND Lightning tools for Amplifier -- thin mount wiring."""
 
-from __future__ import annotations
-
-import logging
 import os
 from typing import Any
 
@@ -1894,13 +1916,11 @@ from .tools import (
     PayInvoiceTool,
 )
 
-logger = logging.getLogger(__name__)
-
 
 async def mount(
     coordinator: ModuleCoordinator,
     config: dict[str, Any] | None = None,
-) -> Any:
+):
     config = config or {}
 
     host = config.get("rest_host") or os.environ.get("LND_REST_HOST", "127.0.0.1")
@@ -1913,32 +1933,26 @@ async def mount(
             "LND TLS cert path is required (config: tls_cert or env: LND_TLS_CERT)"
         )
 
-    macaroon_path = config.get("macaroon_path") or os.environ.get(
-        "LND_MACAROON_PATH"
-    )
+    macaroon_path = config.get("macaroon_path") or os.environ.get("LND_MACAROON_PATH")
     if not macaroon_path:
         raise ValueError(
             "LND macaroon path is required (config: macaroon_path or env: LND_MACAROON_PATH)"
         )
 
     macaroon_hex = load_macaroon(macaroon_path)
-    client = LndClient(rest_url=rest_url, tls_cert=tls_cert, macaroon_hex=macaroon_hex)
+    client = LndClient(rest_url, tls_cert, macaroon_hex)
 
-    tools = [
+    for tool in (
         CreateInvoiceTool(client),
         ListInvoicesTool(client),
         LookupInvoiceTool(client),
         NodeInfoTool(client),
         ChannelBalanceTool(client),
         PayInvoiceTool(client),
-    ]
-
-    for tool in tools:
+    ):
         await coordinator.mount("tools", tool, name=tool.name)
 
-    logger.info("Mounted %d LND tools at %s", len(tools), rest_url)
-
-    async def cleanup() -> None:
+    async def cleanup():
         await client.close()
 
     return cleanup
@@ -1961,15 +1975,24 @@ for f in [
 
 Expected: `OK` for all three.
 
-**Step 5: Commit**
+**Step 5: Run tests**
+
+```bash
+cd modules/tool-lnd && python -m pytest tests/ -v
+```
+
+Expected: 40 tests passed (0.09s).
+
+**Step 6: Commit**
 
 ```bash
 git add modules/tool-lnd/amplifier_module_tool_lnd/
-git commit -m "refactor: split tool-lnd into client/tools/mount pattern
+git commit -m "refactor: split tool-lnd monolith into client.py + tools.py + __init__.py
 
 Extract LndClient (shared lazy httpx transport with TLS + macaroon auth)
 into client.py. Consolidate duplicated _STATE dicts into single
-INVOICE_STATE_LABELS constant. Move all 6 tool classes into tools.py.
+INVOICE_STATE_LABELS constant. Move all 6 tool classes into tools.py
+with shared _lnd_request() DRY error-handling helper.
 Reduce __init__.py to mount() wiring that returns a cleanup function."
 ```
 

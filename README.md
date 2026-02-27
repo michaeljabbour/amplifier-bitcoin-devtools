@@ -40,7 +40,7 @@ modules/
 1. Clone this repository:
 
    ```bash
-   git clone https://github.com/<your-org>/bitcoin-devtools.git
+   git clone https://github.com/michaeljabbour/amplifier-bitcoin-devtools.git
    cd bitcoin-devtools
    ```
 
@@ -124,7 +124,7 @@ The market-maker agent queries the Nostr relay and presents active markets.
 |--------|-------------|
 | `tool-bitcoin-rpc` | `httpx>=0.27` |
 | `tool-lnd` | `httpx` |
-| `tool-aggeus-markets` | `websockets>=12.0`, `coincurve>=13.0`, `cryptography>=42.0` |
+| `tool-aggeus-markets` | `websockets>=12.0`, `coincurve>=13.0` |
 
 All modules use [Hatchling](https://hatch.pypa.io/) as the build backend and
 register via the `amplifier.modules` entry point group.
