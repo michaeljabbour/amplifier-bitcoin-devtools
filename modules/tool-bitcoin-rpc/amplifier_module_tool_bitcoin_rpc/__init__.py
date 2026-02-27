@@ -378,11 +378,17 @@ The `wallet` parameter is required for every action except `list`."""
         try:
             if action == "list":
                 loaded = await self._rpc("listwallets")
-                on_disk = [w["name"] for w in (await self._rpc("listwalletdir"))["wallets"]]
+                on_disk = [
+                    w["name"] for w in (await self._rpc("listwalletdir"))["wallets"]
+                ]
                 lines = ["Wallets on disk:"]
                 for name in on_disk:
                     tag = " (loaded)" if name in loaded else ""
-                    display = f'"{name}"' if name else '"" (unnamed default wallet — pass wallet: "" to reference it)'
+                    display = (
+                        f'"{name}"'
+                        if name
+                        else '"" (unnamed default wallet — pass wallet: "" to reference it)'
+                    )
                     lines.append(f"  {display}{tag}")
                 if not on_disk:
                     lines.append("  none")
@@ -398,7 +404,9 @@ The `wallet` parameter is required for every action except `list`."""
             if action in ("create", "load") and not wallet:
                 return ToolResult(
                     success=False,
-                    error={"message": f"A non-empty wallet name is required for '{action}'."},
+                    error={
+                        "message": f"A non-empty wallet name is required for '{action}'."
+                    },
                 )
 
             if action == "info":
@@ -416,11 +424,15 @@ The `wallet` parameter is required for every action except `list`."""
 
             if action == "create":
                 result = await self._rpc("createwallet", params=[wallet])
-                return ToolResult(success=True, output=f"Created wallet '{result['name']}'.")
+                return ToolResult(
+                    success=True, output=f"Created wallet '{result['name']}'."
+                )
 
             if action == "load":
                 result = await self._rpc("loadwallet", params=[wallet])
-                return ToolResult(success=True, output=f"Loaded wallet '{result['name']}'.")
+                return ToolResult(
+                    success=True, output=f"Loaded wallet '{result['name']}'."
+                )
 
             if action == "unload":
                 await self._rpc("unloadwallet", params=[wallet])
@@ -429,10 +441,14 @@ The `wallet` parameter is required for every action except `list`."""
         except httpx.HTTPStatusError as e:
             return ToolResult(
                 success=False,
-                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+                error={
+                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
+                },
             )
         except httpx.RequestError as e:
-            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+            return ToolResult(
+                success=False, error={"message": f"Could not reach Bitcoin node: {e}"}
+            )
         except RuntimeError as e:
             return ToolResult(success=False, error={"message": str(e)})
 
@@ -476,7 +492,7 @@ Address types:
                 },
                 "wallet": {
                     "type": "string",
-                    "description": "Wallet to generate the address from. Pass \"\" for the default wallet.",
+                    "description": 'Wallet to generate the address from. Pass "" for the default wallet.',
                 },
             },
             "required": [],
@@ -514,14 +530,20 @@ Address types:
         except httpx.HTTPStatusError as e:
             return ToolResult(
                 success=False,
-                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+                error={
+                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
+                },
             )
         except httpx.RequestError as e:
-            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+            return ToolResult(
+                success=False, error={"message": f"Could not reach Bitcoin node: {e}"}
+            )
 
         data = response.json()
         if data.get("error"):
-            return ToolResult(success=False, error={"message": f"RPC error: {data['error']}"})
+            return ToolResult(
+                success=False, error={"message": f"RPC error: {data['error']}"}
+            )
 
         address = data["result"]
         parts = [f"Address: {address}"]
@@ -591,9 +613,13 @@ rather than on top."""
         subtract_fee = input.get("subtract_fee_from_amount", False)
 
         if not address:
-            return ToolResult(success=False, error={"message": "'address' is required."})
+            return ToolResult(
+                success=False, error={"message": "'address' is required."}
+            )
         if amount_sats is None:
-            return ToolResult(success=False, error={"message": "'amount_sats' is required."})
+            return ToolResult(
+                success=False, error={"message": "'amount_sats' is required."}
+            )
 
         btc_amount = round(amount_sats / 100_000_000, 8)
         url = f"{self._rpc_url}/wallet/{wallet}" if wallet else self._rpc_url
@@ -618,14 +644,20 @@ rather than on top."""
         except httpx.HTTPStatusError as e:
             return ToolResult(
                 success=False,
-                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+                error={
+                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
+                },
             )
         except httpx.RequestError as e:
-            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+            return ToolResult(
+                success=False, error={"message": f"Could not reach Bitcoin node: {e}"}
+            )
 
         data = response.json()
         if data.get("error"):
-            return ToolResult(success=False, error={"message": f"RPC error: {data['error']}"})
+            return ToolResult(
+                success=False, error={"message": f"RPC error: {data['error']}"}
+            )
 
         txid = data["result"]
         lines = [
@@ -698,7 +730,7 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
             "required": [],
         }
 
-    async def _rpc(self, method: str, params: list = None, url: str = None) -> Any:
+    async def _rpc(self, method: str, params: list = None, *, url: str) -> Any:
         payload = {
             "jsonrpc": "1.0",
             "id": f"consolidate_{method}",
@@ -707,7 +739,7 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
         }
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url or self._wallet_url,
+                url,
                 json=payload,
                 auth=(self._rpc_user, self._rpc_password),
                 timeout=30.0,
@@ -726,17 +758,19 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
         max_amount_sats = input.get("max_amount_sats")
         min_amount_sats = input.get("min_amount_sats")
 
-        self._wallet_url = f"{self._rpc_url}/wallet/{wallet}" if wallet else self._rpc_url
+        wallet_url = f"{self._rpc_url}/wallet/{wallet}" if wallet else self._rpc_url
 
         try:
             # Fetch eligible UTXOs
-            all_utxos = await self._rpc("listunspent", [min_conf])
+            all_utxos = await self._rpc("listunspent", [min_conf], url=wallet_url)
 
             if not all_utxos:
                 label = f"wallet '{wallet}'" if wallet else "default wallet"
                 return ToolResult(
                     success=False,
-                    error={"message": f"No UTXOs with {min_conf}+ confirmations found in {label}."},
+                    error={
+                        "message": f"No UTXOs with {min_conf}+ confirmations found in {label}."
+                    },
                 )
 
             # Filter to specific outpoints if requested
@@ -747,7 +781,9 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
                     if len(parts) != 2 or not parts[1].isdigit():
                         return ToolResult(
                             success=False,
-                            error={"message": f"Invalid outpoint '{op}'. Expected format: 'txid:vout'."},
+                            error={
+                                "message": f"Invalid outpoint '{op}'. Expected format: 'txid:vout'."
+                            },
                         )
                     parsed.add((parts[0], int(parts[1])))
 
@@ -755,16 +791,26 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
                 if not selected:
                     return ToolResult(
                         success=False,
-                        error={"message": "None of the specified outpoints were found in the eligible UTXO set."},
+                        error={
+                            "message": "None of the specified outpoints were found in the eligible UTXO set."
+                        },
                     )
             else:
                 selected = all_utxos
 
             # Apply amount filters
             if max_amount_sats is not None:
-                selected = [u for u in selected if int(round(u["amount"] * 100_000_000)) <= max_amount_sats]
+                selected = [
+                    u
+                    for u in selected
+                    if int(round(u["amount"] * 100_000_000)) <= max_amount_sats
+                ]
             if min_amount_sats is not None:
-                selected = [u for u in selected if int(round(u["amount"] * 100_000_000)) >= min_amount_sats]
+                selected = [
+                    u
+                    for u in selected
+                    if int(round(u["amount"] * 100_000_000)) >= min_amount_sats
+                ]
 
             if not selected:
                 return ToolResult(
@@ -774,21 +820,29 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
 
             # Resolve destination address
             if not address:
-                address = await self._rpc("getnewaddress")
+                address = await self._rpc("getnewaddress", url=wallet_url)
 
             total_btc = sum(u["amount"] for u in selected)
             total_sats = int(round(total_btc * 100_000_000))
             inputs = [{"txid": u["txid"], "vout": u["vout"]} for u in selected]
 
-            result = await self._rpc("sendall", [
-                [address],
-                None,   # conf_target
-                None,   # estimate_mode
-                None,   # fee_rate
-                {"inputs": inputs},
-            ])
+            result = await self._rpc(
+                "sendall",
+                [
+                    [address],
+                    None,  # conf_target
+                    None,  # estimate_mode
+                    None,  # fee_rate
+                    {"inputs": inputs},
+                ],
+                url=wallet_url,
+            )
 
-            txid = result.get("txid", str(result)) if isinstance(result, dict) else str(result)
+            txid = (
+                result.get("txid", str(result))
+                if isinstance(result, dict)
+                else str(result)
+            )
 
             lines = [
                 f"Consolidated {len(selected)} UTXO(s) → {address}",
@@ -797,17 +851,23 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
                 "\nFee deducted from output automatically. Run list_utxos after confirmation to see the final amount.",
             ]
             if len(selected) == 1:
-                lines.append("\nNote: Only 1 UTXO was selected — this just moves funds to a new address.")
+                lines.append(
+                    "\nNote: Only 1 UTXO was selected — this just moves funds to a new address."
+                )
 
             return ToolResult(success=True, output="\n".join(lines))
 
         except httpx.HTTPStatusError as e:
             return ToolResult(
                 success=False,
-                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+                error={
+                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
+                },
             )
         except httpx.RequestError as e:
-            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+            return ToolResult(
+                success=False, error={"message": f"Could not reach Bitcoin node: {e}"}
+            )
         except RuntimeError as e:
             return ToolResult(success=False, error={"message": str(e)})
 
@@ -857,9 +917,14 @@ first reward immediately spendable."""
         address = input.get("address", "")
 
         if not address:
-            return ToolResult(success=False, error={"message": "'address' is required."})
+            return ToolResult(
+                success=False, error={"message": "'address' is required."}
+            )
         if not num_blocks or num_blocks < 1:
-            return ToolResult(success=False, error={"message": "'num_blocks' must be a positive integer."})
+            return ToolResult(
+                success=False,
+                error={"message": "'num_blocks' must be a positive integer."},
+            )
 
         payload = {
             "jsonrpc": "1.0",
@@ -880,14 +945,20 @@ first reward immediately spendable."""
         except httpx.HTTPStatusError as e:
             return ToolResult(
                 success=False,
-                error={"message": f"HTTP error {e.response.status_code}: {e.response.text}"},
+                error={
+                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
+                },
             )
         except httpx.RequestError as e:
-            return ToolResult(success=False, error={"message": f"Could not reach Bitcoin node: {e}"})
+            return ToolResult(
+                success=False, error={"message": f"Could not reach Bitcoin node: {e}"}
+            )
 
         data = response.json()
         if data.get("error"):
-            return ToolResult(success=False, error={"message": f"RPC error: {data['error']}"})
+            return ToolResult(
+                success=False, error={"message": f"RPC error: {data['error']}"}
+            )
 
         block_hashes = data["result"]
         reward_sats = num_blocks * 5_000_000_000  # 50 BTC per block on regtest
@@ -937,16 +1008,22 @@ async def mount(
     split_tool = SplitUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
     await coordinator.mount("tools", split_tool, name=split_tool.name)
 
-    wallet_tool = ManageWalletTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    wallet_tool = ManageWalletTool(
+        rpc_url=rpc_url, rpc_user=user, rpc_password=password
+    )
     await coordinator.mount("tools", wallet_tool, name=wallet_tool.name)
 
-    address_tool = GenerateAddressTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    address_tool = GenerateAddressTool(
+        rpc_url=rpc_url, rpc_user=user, rpc_password=password
+    )
     await coordinator.mount("tools", address_tool, name=address_tool.name)
 
     send_tool = SendCoinsTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
     await coordinator.mount("tools", send_tool, name=send_tool.name)
 
-    consolidate_tool = ConsolidateUtxosTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
+    consolidate_tool = ConsolidateUtxosTool(
+        rpc_url=rpc_url, rpc_user=user, rpc_password=password
+    )
     await coordinator.mount("tools", consolidate_tool, name=consolidate_tool.name)
 
     mine_tool = MineBlocksTool(rpc_url=rpc_url, rpc_user=user, rpc_password=password)
