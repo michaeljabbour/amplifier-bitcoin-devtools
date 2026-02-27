@@ -40,9 +40,7 @@ def test_load_credentials_uses_context_manager():
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "_load_credentials":
             # Check there is at least one `with` statement
-            has_with = any(
-                isinstance(stmt, ast.With) for stmt in ast.walk(node)
-            )
+            has_with = any(isinstance(stmt, ast.With) for stmt in ast.walk(node))
             assert has_with, (
                 "_load_credentials must use a `with` statement (context manager) for file I/O"
             )
@@ -77,10 +75,9 @@ def test_load_credentials_uses_context_manager():
 def test_file_not_found_raises_value_error():
     """Missing cookie file must raise ValueError mentioning BITCOIN_COOKIE_FILE."""
     config = {"cookie_file": "/nonexistent/path/to/.cookie"}
-    with pytest.raises(ValueError, match="Cookie file not found"):
+    with pytest.raises(ValueError, match="Cookie file not found") as exc_info:
         _load_credentials(config)
-    with pytest.raises(ValueError, match="BITCOIN_COOKIE_FILE"):
-        _load_credentials(config)
+    assert "BITCOIN_COOKIE_FILE" in str(exc_info.value)
 
 
 def test_permission_denied_raises_value_error():
@@ -93,10 +90,9 @@ def test_permission_denied_raises_value_error():
     try:
         p.chmod(0o000)
         config = {"cookie_file": tmp_path}
-        with pytest.raises(ValueError, match="Permission denied"):
+        with pytest.raises(ValueError, match="Permission denied") as exc_info:
             _load_credentials(config)
-        with pytest.raises(ValueError, match="file permissions"):
-            _load_credentials(config)
+        assert "file permissions" in str(exc_info.value)
     finally:
         p.chmod(0o644)
         p.unlink()
@@ -109,9 +105,7 @@ def test_permission_denied_raises_value_error():
 
 def test_valid_cookie_file_returns_credentials():
     """A valid cookie file should return (user, password) tuple."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".cookie", delete=False
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".cookie", delete=False) as tmp:
         tmp.write("__cookie__:abc123secret")
         tmp_path = tmp.name
 
