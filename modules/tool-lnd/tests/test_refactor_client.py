@@ -17,6 +17,8 @@ import httpx
 import pytest
 import respx
 
+from conftest import make_test_client
+
 CLIENT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
     "amplifier_module_tool_lnd/client.py"
 )
@@ -24,22 +26,6 @@ CLIENT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
 BASE_URL = "https://localhost:8080"
 TLS_CERT = "/tmp/fake-tls.cert"
 MACAROON_HEX = "abcdef0123456789"
-
-
-def _make_test_client(lnd_client):
-    """Inject a test-friendly httpx.AsyncClient that skips TLS verification.
-
-    The real _ensure_client() would fail in tests because verify=tls_cert
-    tries to load a real certificate file. We inject a client with verify=False
-    but keep the same base_url and headers to test real behavior.
-    """
-    lnd_client._client = httpx.AsyncClient(
-        base_url=lnd_client._base_url,
-        verify=False,
-        headers={"Grpc-Metadata-Macaroon": lnd_client._macaroon_hex},
-        timeout=30.0,
-    )
-    return lnd_client
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +163,7 @@ async def test_get_calls_raise_for_status_and_returns_json():
         return_value=httpx.Response(200, json={"alias": "testnode"})
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     result = await client.get("/v1/getinfo")
     await client.close()
 
@@ -194,7 +180,7 @@ async def test_post_calls_raise_for_status_and_returns_json():
         return_value=httpx.Response(200, json={"payment_request": "lnbc..."})
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     result = await client.post("/v1/invoices", json={"value": 1000})
     await client.close()
 
@@ -211,7 +197,7 @@ async def test_get_raises_on_http_error():
         return_value=httpx.Response(500, text="error")
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     with pytest.raises(httpx.HTTPStatusError):
         await client.get("/v1/getinfo")
     await client.close()
@@ -227,7 +213,7 @@ async def test_post_raises_on_http_error():
         return_value=httpx.Response(400, text="bad request")
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     with pytest.raises(httpx.HTTPStatusError):
         await client.post("/v1/invoices", json={})
     await client.close()
@@ -248,7 +234,7 @@ async def test_client_sends_macaroon_header():
 
     respx.get(f"{BASE_URL}/v1/getinfo").mock(side_effect=capture)
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     await client.get("/v1/getinfo")
     await client.close()
 
@@ -279,7 +265,7 @@ async def test_get_passes_params():
 
     respx.get(f"{BASE_URL}/v1/invoices").mock(side_effect=capture)
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     await client.get("/v1/invoices", params={"num_max_invoices": 10})
     await client.close()
 
@@ -296,11 +282,9 @@ async def test_post_passes_timeout():
         return_value=httpx.Response(200, json={"payment_preimage": "abc"})
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     # Should not raise - just verifying the timeout param is accepted
-    result = await client.post(
-        "/v1/channels/transactions", json={}, timeout=70.0
-    )
+    result = await client.post("/v1/channels/transactions", json={}, timeout=70.0)
     await client.close()
 
     assert result == {"payment_preimage": "abc"}

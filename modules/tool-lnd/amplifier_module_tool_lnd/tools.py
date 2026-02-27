@@ -4,12 +4,35 @@ Each tool receives a shared ``LndClient`` instance and delegates
 all network I/O through its ``get()`` and ``post()`` methods.
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 from amplifier_core import ToolResult
 
 from .client import INVOICE_STATE_LABELS, LndClient, lnd_error
+
+
+async def _lnd_request(coro: Callable[[], Awaitable[Any]]) -> ToolResult | Any:
+    """Execute an LND client call with standard error handling.
+
+    Returns the parsed JSON data on success, or a failed ``ToolResult``
+    on HTTP or connection errors.
+    """
+    try:
+        return await coro()
+    except httpx.HTTPStatusError as e:
+        return ToolResult(
+            success=False,
+            error={
+                "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
+            },
+        )
+    except httpx.RequestError as e:
+        return ToolResult(
+            success=False,
+            error={"message": f"Could not reach LND node: {e}"},
+        )
 
 
 class CreateInvoiceTool:
@@ -53,29 +76,21 @@ invoice that lets the payer choose."""
             "required": [],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
         body: dict[str, Any] = {}
-        if amt := input.get("amt_sats"):
+        if amt := params.get("amt_sats"):
             body["value"] = amt
-        if memo := input.get("memo"):
+        if memo := params.get("memo"):
             body["memo"] = memo
-        if expiry := input.get("expiry"):
+        if expiry := params.get("expiry"):
             body["expiry"] = str(expiry)
 
-        try:
-            data = await self._client.post("/v1/invoices", json=body)
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach LND node: {e}"},
-            )
+        result = await _lnd_request(
+            lambda: self._client.post("/v1/invoices", json=body)
+        )
+        if isinstance(result, ToolResult):
+            return result
+        data = result
 
         payment_request = data.get("payment_request", "")
         r_hash = data.get("r_hash", "")
@@ -89,12 +104,12 @@ invoice that lets the payer choose."""
             "",
             f"Payment hash: {r_hash}",
         ]
-        amt_sats = input.get("amt_sats", 0)
+        amt_sats = params.get("amt_sats", 0)
         if amt_sats:
             lines.append(f"Amount:       {amt_sats:,} sats")
         else:
             lines.append("Amount:       (any \u2014 payer chooses)")
-        if memo := input.get("memo"):
+        if memo := params.get("memo"):
             lines.append(f"Memo:         {memo}")
 
         return ToolResult(success=True, output="\n".join(lines))
@@ -136,28 +151,20 @@ Pass `pending_only=true` to show only open (unpaid) invoices."""
             "required": [],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        params: dict[str, Any] = {
-            "num_max_invoices": input.get("max_invoices", 100),
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        query: dict[str, Any] = {
+            "num_max_invoices": params.get("max_invoices", 100),
             "reversed": True,
         }
-        if input.get("pending_only"):
-            params["pending_only"] = True
+        if params.get("pending_only"):
+            query["pending_only"] = True
 
-        try:
-            data = await self._client.get("/v1/invoices", params=params)
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach LND node: {e}"},
-            )
+        result = await _lnd_request(
+            lambda: self._client.get("/v1/invoices", params=query)
+        )
+        if isinstance(result, ToolResult):
+            return result
+        data = result
 
         invoices = data.get("invoices", [])
         if not invoices:
@@ -212,25 +219,15 @@ Returns the invoice's amount, memo, status, and full payment request."""
             "required": ["r_hash"],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        r_hash = input.get("r_hash", "").strip()
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        r_hash = params.get("r_hash", "").strip()
         if not r_hash:
             return ToolResult(success=False, error={"message": "'r_hash' is required."})
 
-        try:
-            inv = await self._client.get(f"/v1/invoice/{r_hash}")
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach LND node: {e}"},
-            )
+        result = await _lnd_request(lambda: self._client.get(f"/v1/invoice/{r_hash}"))
+        if isinstance(result, ToolResult):
+            return result
+        inv = result
 
         raw_state: str = inv.get("state", "?")
         status: str = INVOICE_STATE_LABELS.get(raw_state) or raw_state
@@ -272,21 +269,11 @@ number of active channels, and sync status."""
     def input_schema(self) -> dict:
         return {"type": "object", "properties": {}, "required": []}
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        try:
-            info = await self._client.get("/v1/getinfo")
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach LND node: {e}"},
-            )
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        result = await _lnd_request(lambda: self._client.get("/v1/getinfo"))
+        if isinstance(result, ToolResult):
+            return result
+        info = result
 
         network = (info.get("chains") or [{}])[0].get("network", "?")
         lines = [
@@ -323,21 +310,11 @@ send), remote balance (funds it can receive), and any pending amounts."""
     def input_schema(self) -> dict:
         return {"type": "object", "properties": {}, "required": []}
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        try:
-            bal = await self._client.get("/v1/balance/channels")
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach LND node: {e}"},
-            )
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        result = await _lnd_request(lambda: self._client.get("/v1/balance/channels"))
+        if isinstance(result, ToolResult):
+            return result
+        bal = result
 
         local_sat = int((bal.get("local_balance") or {}).get("sat", 0))
         remote_sat = int((bal.get("remote_balance") or {}).get("sat", 0))
@@ -401,40 +378,32 @@ Use `timeout_seconds` to override the payment timeout (default: 60 seconds)."""
             "required": ["payment_request"],
         }
 
-    async def execute(self, input: dict[str, Any]) -> ToolResult:
-        payment_request = input.get("payment_request", "").strip()
+    async def execute(self, params: dict[str, Any]) -> ToolResult:
+        payment_request = params.get("payment_request", "").strip()
         if not payment_request:
             return ToolResult(
                 success=False,
                 error={"message": "'payment_request' is required."},
             )
 
-        fee_limit_sats = int(input.get("fee_limit_sats", 1000))
-        timeout_seconds = int(input.get("timeout_seconds", 60))
+        fee_limit_sats = int(params.get("fee_limit_sats", 1000))
+        timeout_seconds = int(params.get("timeout_seconds", 60))
 
         body: dict[str, Any] = {
             "payment_request": payment_request,
             "fee_limit": {"fixed": fee_limit_sats},
         }
 
-        try:
-            data = await self._client.post(
+        result = await _lnd_request(
+            lambda: self._client.post(
                 "/v1/channels/transactions",
                 json=body,
                 timeout=timeout_seconds + 10.0,
             )
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP {e.response.status_code}: {lnd_error(e.response)}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach LND node: {e}"},
-            )
+        )
+        if isinstance(result, ToolResult):
+            return result
+        data = result
 
         payment_error = data.get("payment_error", "")
         if payment_error:

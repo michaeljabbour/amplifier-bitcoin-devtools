@@ -16,6 +16,8 @@ import httpx
 import pytest
 import respx
 
+from conftest import make_test_client
+
 TOOLS_SRC = pathlib.Path(__file__).resolve().parents[1] / (
     "amplifier_module_tool_lnd/tools.py"
 )
@@ -23,17 +25,6 @@ TOOLS_SRC = pathlib.Path(__file__).resolve().parents[1] / (
 BASE_URL = "https://localhost:8080"
 TLS_CERT = "/tmp/fake-tls.cert"
 MACAROON_HEX = "abcdef0123456789"
-
-
-def _make_test_client(lnd_client):
-    """Inject a test-friendly httpx.AsyncClient that skips TLS verification."""
-    lnd_client._client = httpx.AsyncClient(
-        base_url=lnd_client._base_url,
-        verify=False,
-        headers={"Grpc-Metadata-Macaroon": lnd_client._macaroon_hex},
-        timeout=30.0,
-    )
-    return lnd_client
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +139,7 @@ async def test_create_invoice_success():
         )
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = CreateInvoiceTool(client)
     result = await tool.execute({"amt_sats": 1000, "memo": "test"})
     await client.close()
@@ -165,12 +156,10 @@ async def test_create_invoice_http_error():
     from amplifier_module_tool_lnd.tools import CreateInvoiceTool
 
     respx.post(f"{BASE_URL}/v1/invoices").mock(
-        return_value=httpx.Response(
-            500, json={"message": "internal error"}
-        )
+        return_value=httpx.Response(500, json={"message": "internal error"})
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = CreateInvoiceTool(client)
     result = await tool.execute({"amt_sats": 1000})
     await client.close()
@@ -207,7 +196,7 @@ async def test_node_info_success():
         )
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = NodeInfoTool(client)
     result = await tool.execute({})
     await client.close()
@@ -238,7 +227,7 @@ async def test_channel_balance_success():
         )
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = ChannelBalanceTool(client)
     result = await tool.execute({})
     await client.close()
@@ -273,7 +262,7 @@ async def test_pay_invoice_success():
         )
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = PayInvoiceTool(client)
     result = await tool.execute({"payment_request": "lnbc1000..."})
     await client.close()
@@ -289,7 +278,7 @@ async def test_pay_invoice_missing_request():
     from amplifier_module_tool_lnd.client import LndClient
     from amplifier_module_tool_lnd.tools import PayInvoiceTool
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = PayInvoiceTool(client)
     result = await tool.execute({})
     await client.close()
@@ -327,7 +316,7 @@ async def test_list_invoices_success():
         )
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = ListInvoicesTool(client)
     result = await tool.execute({})
     await client.close()
@@ -362,7 +351,7 @@ async def test_lookup_invoice_success():
         )
     )
 
-    client = _make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
     tool = LookupInvoiceTool(client)
     result = await tool.execute({"r_hash": "abc123"})
     await client.close()
