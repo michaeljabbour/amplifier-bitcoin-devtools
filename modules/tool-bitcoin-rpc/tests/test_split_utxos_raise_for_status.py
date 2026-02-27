@@ -1,9 +1,10 @@
-"""Tests for SplitUtxosTool._rpc_call raise_for_status fix.
+"""Tests for raise_for_status fix (now in BitcoinRpcClient.rpc).
 
-Verifies that:
-1. The _rpc_call method calls response.raise_for_status() inside the async with block.
-2. An HTTP 500 error raises httpx.HTTPStatusError, not JSONDecodeError.
-3. The source file parses cleanly with ast.parse.
+After the Pattern B refactor, raise_for_status lives in BitcoinRpcClient.rpc()
+rather than SplitUtxosTool._rpc_call. These tests verify:
+1. The client source file parses cleanly with ast.parse.
+2. BitcoinRpcClient.rpc() calls response.raise_for_status().
+3. An HTTP 500 error raises httpx.HTTPStatusError, not JSONDecodeError.
 """
 
 import ast
@@ -13,10 +14,10 @@ import httpx
 import pytest
 import respx
 
-from amplifier_module_tool_bitcoin_rpc import SplitUtxosTool
+from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
 
 SRC_PATH = pathlib.Path(__file__).resolve().parents[1] / (
-    "amplifier_module_tool_bitcoin_rpc/__init__.py"
+    "amplifier_module_tool_bitcoin_rpc/client.py"
 )
 
 RPC_URL = "http://localhost:18443"
@@ -36,42 +37,33 @@ def test_source_parses_cleanly():
     assert tree is not None
 
 
-def test_rpc_call_has_raise_for_status():
-    """SplitUtxosTool._rpc_call must call response.raise_for_status() inside
-    the async with block, before response.json()."""
+def test_rpc_method_has_raise_for_status():
+    """BitcoinRpcClient.rpc must call response.raise_for_status()."""
     source = SRC_PATH.read_text()
     tree = ast.parse(source)
 
-    # Find the SplitUtxosTool class
-    split_class = None
+    # Find the BitcoinRpcClient class
+    client_class = None
     for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == "SplitUtxosTool":
-            split_class = node
+        if isinstance(node, ast.ClassDef) and node.name == "BitcoinRpcClient":
+            client_class = node
             break
-    assert split_class is not None, "SplitUtxosTool class not found"
+    assert client_class is not None, "BitcoinRpcClient class not found"
 
-    # Find the _rpc_call method
-    rpc_call_method = None
-    for node in ast.walk(split_class):
+    # Find the rpc method
+    rpc_method = None
+    for node in ast.walk(client_class):
         if (
             isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == "_rpc_call"
+            and node.name == "rpc"
         ):
-            rpc_call_method = node
+            rpc_method = node
             break
-    assert rpc_call_method is not None, "_rpc_call method not found in SplitUtxosTool"
+    assert rpc_method is not None, "rpc method not found in BitcoinRpcClient"
 
-    # Find the `async with` statement inside _rpc_call
-    async_with_node = None
-    for node in ast.walk(rpc_call_method):
-        if isinstance(node, ast.AsyncWith):
-            async_with_node = node
-            break
-    assert async_with_node is not None, "async with block not found in _rpc_call"
-
-    # Check that raise_for_status() is called INSIDE the async with body
+    # Check that raise_for_status() is called in the rpc method
     found_raise_for_status = False
-    for node in ast.walk(async_with_node):
+    for node in ast.walk(rpc_method):
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
@@ -81,9 +73,8 @@ def test_rpc_call_has_raise_for_status():
             break
 
     assert found_raise_for_status, (
-        "SplitUtxosTool._rpc_call must call response.raise_for_status() "
-        "inside the async with block, matching the pattern in ManageWalletTool._rpc "
-        "and ConsolidateUtxosTool._rpc"
+        "BitcoinRpcClient.rpc must call response.raise_for_status() "
+        "to propagate HTTP errors before parsing JSON"
     )
 
 
@@ -94,36 +85,32 @@ def test_rpc_call_has_raise_for_status():
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_rpc_call_raises_http_status_error_on_500():
-    """When the server returns HTTP 500, _rpc_call must raise HTTPStatusError,
+async def test_rpc_raises_http_status_error_on_500():
+    """When the server returns HTTP 500, rpc() must raise HTTPStatusError,
     not silently swallow it and produce a JSONDecodeError."""
-    tool = SplitUtxosTool(
-        rpc_url=RPC_URL,
-        rpc_user=RPC_USER,
-        rpc_password=RPC_PASS,
-    )
+    client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
 
     respx.post(RPC_URL).mock(
         return_value=httpx.Response(500, text="Internal Server Error"),
     )
 
     with pytest.raises(httpx.HTTPStatusError):
-        await tool._rpc_call("getblockcount")
+        await client.rpc("getblockcount")
+
+    await client.close()
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_rpc_call_raises_http_status_error_on_401():
-    """When the server returns HTTP 401, _rpc_call must raise HTTPStatusError."""
-    tool = SplitUtxosTool(
-        rpc_url=RPC_URL,
-        rpc_user=RPC_USER,
-        rpc_password=RPC_PASS,
-    )
+async def test_rpc_raises_http_status_error_on_401():
+    """When the server returns HTTP 401, rpc() must raise HTTPStatusError."""
+    client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
 
     respx.post(RPC_URL).mock(
         return_value=httpx.Response(401, text="Unauthorized"),
     )
 
     with pytest.raises(httpx.HTTPStatusError):
-        await tool._rpc_call("getblockcount")
+        await client.rpc("getblockcount")
+
+    await client.close()

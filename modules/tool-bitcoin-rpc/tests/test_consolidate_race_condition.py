@@ -1,21 +1,23 @@
 """Tests for ConsolidateUtxosTool race condition fix.
 
+After the Pattern B refactor, all tools share a single BitcoinRpcClient.
+The race condition (instance-level _wallet_url mutation) is eliminated by design:
+wallet URLs are now computed per-call inside client.rpc().
+
 Verifies that:
-1. `_rpc` requires `url` as a keyword-only argument (no default).
-2. `execute()` never sets `self._wallet_url`.
-3. All `_rpc` calls inside `execute()` pass `url=` explicitly.
-4. Concurrent calls with different wallets don't interfere.
+1. ConsolidateUtxosTool receives a BitcoinRpcClient (no per-tool URL state).
+2. Concurrent calls with different wallets don't interfere.
 """
 
 import asyncio
-import inspect
+import json
 
 import httpx
 import pytest
 import respx
 
-from amplifier_module_tool_bitcoin_rpc import ConsolidateUtxosTool
-
+from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
+from amplifier_module_tool_bitcoin_rpc.tools import ConsolidateUtxosTool
 
 RPC_URL = "http://localhost:18443"
 RPC_USER = "testuser"
@@ -23,47 +25,25 @@ RPC_PASS = "testpass"
 
 
 # ---------------------------------------------------------------------------
-# Structural / signature tests
+# Structural tests
 # ---------------------------------------------------------------------------
 
 
-def test_rpc_url_is_keyword_only():
-    """The `url` parameter of `_rpc` must be keyword-only and required."""
-    sig = inspect.signature(ConsolidateUtxosTool._rpc)
-    param = sig.parameters["url"]
-    assert param.kind == inspect.Parameter.KEYWORD_ONLY, (
-        "url must be keyword-only (after *)"
-    )
-    assert param.default is inspect.Parameter.empty, (
-        "url must have no default (required)"
-    )
+def test_tool_uses_shared_client():
+    """ConsolidateUtxosTool must accept a BitcoinRpcClient, not raw credentials."""
+    client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
+    tool = ConsolidateUtxosTool(client)
+    assert tool._client is client
 
 
-def test_execute_does_not_set_wallet_url_attribute():
-    """execute() must not mutate self._wallet_url."""
-    import ast
-    import pathlib
-
-    src_path = pathlib.Path(__file__).resolve().parents[1] / (
-        "amplifier_module_tool_bitcoin_rpc/__init__.py"
-    )
-    tree = ast.parse(src_path.read_text())
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef) or node.name != "ConsolidateUtxosTool":
-            continue
-        for item in ast.walk(node):
-            if (
-                isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and item.name == "execute"
-            ):
-                for stmt in ast.walk(item):
-                    if isinstance(stmt, ast.Attribute) and isinstance(
-                        stmt.ctx, ast.Store
-                    ):
-                        assert stmt.attr != "_wallet_url", (
-                            "execute() must not assign self._wallet_url"
-                        )
+def test_tool_has_no_url_state():
+    """ConsolidateUtxosTool must not have instance-level URL attributes."""
+    client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
+    tool = ConsolidateUtxosTool(client)
+    assert not hasattr(tool, "_rpc_url")
+    assert not hasattr(tool, "_wallet_url")
+    assert not hasattr(tool, "_rpc_user")
+    assert not hasattr(tool, "_rpc_password")
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +55,7 @@ def _mock_rpc_response(method: str, result):
     """Build a JSON-RPC response body."""
     return {
         "jsonrpc": "1.0",
-        "id": f"consolidate_{method}",
+        "id": f"amplifier_{method}",
         "result": result,
         "error": None,
     }
@@ -97,9 +77,6 @@ async def test_concurrent_calls_use_correct_wallet_url():
 
     async def _capture_url(request: httpx.Request) -> httpx.Response:
         captured_urls.append(str(request.url))
-        # Decide response based on method in JSON body
-        import json
-
         body = json.loads(request.content)
         method = body["method"]
         if method == "listunspent":
@@ -112,7 +89,8 @@ async def test_concurrent_calls_use_correct_wallet_url():
             )
         return httpx.Response(200, json=_mock_rpc_response(method, None))
 
-    tool = ConsolidateUtxosTool(RPC_URL, RPC_USER, RPC_PASS)
+    client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
+    tool = ConsolidateUtxosTool(client)
 
     with respx.mock(assert_all_mocked=False) as router:
         router.route().mock(side_effect=_capture_url)
@@ -121,6 +99,8 @@ async def test_concurrent_calls_use_correct_wallet_url():
             tool.execute({"wallet": "wallet_a"}),
             tool.execute({"wallet": "wallet_b"}),
         )
+
+    await client.close()
 
     assert result_a.success, f"wallet_a call failed: {result_a}"
     assert result_b.success, f"wallet_b call failed: {result_b}"

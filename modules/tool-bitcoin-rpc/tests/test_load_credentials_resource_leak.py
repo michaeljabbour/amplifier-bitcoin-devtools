@@ -1,4 +1,4 @@
-"""Tests for _load_credentials resource leak fix.
+"""Tests for load_credentials resource leak fix.
 
 Verifies that:
 1. The function uses a context manager (with statement) for file I/O.
@@ -13,10 +13,10 @@ import tempfile
 
 import pytest
 
-from amplifier_module_tool_bitcoin_rpc import _load_credentials
+from amplifier_module_tool_bitcoin_rpc.client import load_credentials
 
 SRC_PATH = pathlib.Path(__file__).resolve().parents[1] / (
-    "amplifier_module_tool_bitcoin_rpc/__init__.py"
+    "amplifier_module_tool_bitcoin_rpc/client.py"
 )
 
 
@@ -33,16 +33,16 @@ def test_source_parses_cleanly():
 
 
 def test_load_credentials_uses_context_manager():
-    """_load_credentials must use a `with` statement for file I/O, not bare open()."""
+    """load_credentials must use a `with` statement for file I/O, not bare open()."""
     source = SRC_PATH.read_text()
     tree = ast.parse(source)
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "_load_credentials":
+        if isinstance(node, ast.FunctionDef) and node.name == "load_credentials":
             # Check there is at least one `with` statement
             has_with = any(isinstance(stmt, ast.With) for stmt in ast.walk(node))
             assert has_with, (
-                "_load_credentials must use a `with` statement (context manager) for file I/O"
+                "load_credentials must use a `with` statement (context manager) for file I/O"
             )
 
             # Check there is no bare open().read() pattern (Expr -> Call -> Attribute.read)
@@ -59,12 +59,12 @@ def test_load_credentials_uses_context_manager():
                         and value.func.value.func.id == "open"
                     ):
                         pytest.fail(
-                            "_load_credentials must not use bare open().read() — "
+                            "load_credentials must not use bare open().read() — "
                             "use a context manager instead"
                         )
             return
 
-    pytest.fail("_load_credentials function not found in source")
+    pytest.fail("load_credentials function not found in source")
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ def test_file_not_found_raises_value_error():
     """Missing cookie file must raise ValueError mentioning BITCOIN_COOKIE_FILE."""
     config = {"cookie_file": "/nonexistent/path/to/.cookie"}
     with pytest.raises(ValueError, match="Cookie file not found") as exc_info:
-        _load_credentials(config)
+        load_credentials(config)
     assert "BITCOIN_COOKIE_FILE" in str(exc_info.value)
 
 
@@ -91,7 +91,7 @@ def test_permission_denied_raises_value_error():
         p.chmod(0o000)
         config = {"cookie_file": tmp_path}
         with pytest.raises(ValueError, match="Permission denied") as exc_info:
-            _load_credentials(config)
+            load_credentials(config)
         assert "file permissions" in str(exc_info.value)
     finally:
         p.chmod(0o644)
@@ -112,7 +112,7 @@ def test_valid_cookie_file_returns_credentials():
     p = pathlib.Path(tmp_path)
     try:
         config = {"cookie_file": tmp_path}
-        user, password = _load_credentials(config)
+        user, password = load_credentials(config)
         assert user == "__cookie__"
         assert password == "abc123secret"
     finally:
