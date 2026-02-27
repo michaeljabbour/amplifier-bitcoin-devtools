@@ -207,6 +207,7 @@ class SplitUtxosTool:
                 auth=(self._rpc_user, self._rpc_password),
                 timeout=30.0,
             )
+            response.raise_for_status()
 
         data = response.json()
         if data.get("error"):
