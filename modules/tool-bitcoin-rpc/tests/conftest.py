@@ -1,14 +1,17 @@
 """Provide a minimal amplifier_core stub so the module can be imported in tests.
 
-Also provides shared fixtures and helpers for the bitcoin-rpc test suite.
+Also provides shared fixtures for the bitcoin-rpc test suite.
+Constants and response helpers live in ``_helpers.py`` so they can be
+imported by both conftest and test modules.
 """
 
 import sys
 import types
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
+
+from _helpers import RPC_PASS, RPC_URL, RPC_USER, rpc_error, rpc_success  # noqa: F401
 
 
 def _install_amplifier_core_stub():
@@ -31,10 +34,6 @@ _install_amplifier_core_stub()
 
 from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient  # noqa: E402
 
-RPC_URL = "http://127.0.0.1:18443"
-RPC_USER = "testuser"
-RPC_PASS = "testpass"
-
 
 @pytest.fixture
 def rpc_client():
@@ -48,29 +47,3 @@ def mock_rpc_client():
     client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
     client.rpc = AsyncMock()
     return client
-
-
-def rpc_success(result):
-    """Build an httpx.Response that looks like a JSON-RPC success."""
-    return httpx.Response(
-        200,
-        json={
-            "jsonrpc": "1.0",
-            "id": "amplifier_test",
-            "result": result,
-            "error": None,
-        },
-    )
-
-
-def rpc_error(code, message):
-    """Build an httpx.Response that looks like a JSON-RPC error."""
-    return httpx.Response(
-        200,
-        json={
-            "jsonrpc": "1.0",
-            "id": "amplifier_test",
-            "result": None,
-            "error": {"code": code, "message": message},
-        },
-    )

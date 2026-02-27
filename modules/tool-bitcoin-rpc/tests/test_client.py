@@ -11,8 +11,7 @@ import pytest
 import respx
 
 from amplifier_module_tool_bitcoin_rpc.client import load_credentials
-
-RPC_URL = "http://127.0.0.1:18443"
+from _helpers import RPC_URL, rpc_error, rpc_success
 
 
 # ---------------------------------------------------------------------------
@@ -28,15 +27,7 @@ async def test_rpc_sends_correct_jsonrpc_envelope(rpc_client):
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        return httpx.Response(
-            200,
-            json={
-                "jsonrpc": "1.0",
-                "id": "amplifier_getblockcount",
-                "result": 42,
-                "error": None,
-            },
-        )
+        return rpc_success(42)
 
     respx.post(RPC_URL).mock(side_effect=_capture)
 
@@ -59,17 +50,7 @@ async def test_rpc_sends_correct_jsonrpc_envelope(rpc_client):
 @respx.mock
 async def test_rpc_with_wallet_constructs_correct_url(rpc_client):
     """rpc(wallet='alice') must POST to /wallet/alice."""
-    route = respx.post(f"{RPC_URL}/wallet/alice").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "jsonrpc": "1.0",
-                "id": "amplifier_listunspent",
-                "result": [],
-                "error": None,
-            },
-        )
-    )
+    route = respx.post(f"{RPC_URL}/wallet/alice").mock(return_value=rpc_success([]))
 
     await rpc_client.rpc("listunspent", wallet="alice")
     await rpc_client.close()
@@ -81,17 +62,7 @@ async def test_rpc_with_wallet_constructs_correct_url(rpc_client):
 @respx.mock
 async def test_rpc_without_wallet_uses_base_url(rpc_client):
     """rpc() without wallet must POST to the base URL and return the result."""
-    route = respx.post(RPC_URL).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "jsonrpc": "1.0",
-                "id": "amplifier_getblockcount",
-                "result": 100,
-                "error": None,
-            },
-        )
-    )
+    route = respx.post(RPC_URL).mock(return_value=rpc_success(100))
 
     result = await rpc_client.rpc("getblockcount")
     await rpc_client.close()
@@ -109,21 +80,13 @@ async def test_rpc_without_wallet_uses_base_url(rpc_client):
 @respx.mock
 async def test_rpc_raises_runtime_error_on_rpc_error(rpc_client):
     """A JSON-RPC-level error must raise RuntimeError."""
-    respx.post(RPC_URL).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "jsonrpc": "1.0",
-                "id": "amplifier_bad",
-                "result": None,
-                "error": {"code": -32601, "message": "Method not found"},
-            },
-        )
-    )
+    respx.post(RPC_URL).mock(return_value=rpc_error(-32601, "Method not found"))
 
-    with pytest.raises(RuntimeError, match="RPC error"):
-        await rpc_client.rpc("bad")
-    await rpc_client.close()
+    try:
+        with pytest.raises(RuntimeError, match="RPC error"):
+            await rpc_client.rpc("bad")
+    finally:
+        await rpc_client.close()
 
 
 @pytest.mark.asyncio
@@ -132,9 +95,11 @@ async def test_rpc_raises_on_http_error(rpc_client):
     """HTTP 401 must raise httpx.HTTPStatusError."""
     respx.post(RPC_URL).mock(return_value=httpx.Response(401, text="Unauthorized"))
 
-    with pytest.raises(httpx.HTTPStatusError):
-        await rpc_client.rpc("getblockcount")
-    await rpc_client.close()
+    try:
+        with pytest.raises(httpx.HTTPStatusError):
+            await rpc_client.rpc("getblockcount")
+    finally:
+        await rpc_client.close()
 
 
 @pytest.mark.asyncio
@@ -162,17 +127,7 @@ def test_lazy_client_creation(rpc_client):
 @respx.mock
 async def test_close_closes_client(rpc_client):
     """After close(), the internal _client must be None."""
-    respx.post(RPC_URL).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "jsonrpc": "1.0",
-                "id": "amplifier_ping",
-                "result": None,
-                "error": None,
-            },
-        )
-    )
+    respx.post(RPC_URL).mock(return_value=rpc_success(None))
 
     # Force client creation
     await rpc_client.rpc("ping")

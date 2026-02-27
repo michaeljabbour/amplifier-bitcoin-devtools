@@ -12,8 +12,7 @@ import httpx
 import pytest
 import respx
 
-
-RPC_URL = "http://127.0.0.1:18443"
+from _helpers import RPC_URL
 
 
 def _capture_and_respond(captured: dict):

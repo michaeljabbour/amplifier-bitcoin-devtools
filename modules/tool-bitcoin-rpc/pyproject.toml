@@ -18,5 +18,8 @@ tool-bitcoin-rpc = "amplifier_module_tool_bitcoin_rpc:mount"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+pythonpath = ["tests"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["amplifier_module_tool_bitcoin_rpc"]

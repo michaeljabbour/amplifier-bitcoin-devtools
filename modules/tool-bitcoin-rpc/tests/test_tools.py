@@ -203,10 +203,8 @@ async def test_send_coins_converts_sats_to_btc(mock_rpc_client):
     assert "txid_send_5678" in result.output
 
     # Verify BTC amount passed: 100_000 sats = 0.001 BTC
-    call_args = mock_rpc_client.rpc.call_args
-    params = call_args.kwargs.get("params") or call_args[1].get(
-        "params", call_args[0][1] if len(call_args[0]) > 1 else None
-    )
+    # The tool calls rpc("sendtoaddress", params=[...], wallet=...)
+    params = mock_rpc_client.rpc.call_args.kwargs["params"]
     assert params[1] == 0.001
 
 
