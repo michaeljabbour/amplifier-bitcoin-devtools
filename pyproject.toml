@@ -1,0 +1,21 @@
+# Root tooling configuration — NOT a Python package.
+# Shared settings for ruff, pyright, and pytest across all modules.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = [
+    "modules/tool-bitcoin-rpc/tests",
+    "modules/tool-lnd/tests",
+    "modules/tool-aggeus-markets/tests",
+]

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint
+        run: ruff check modules/
+      - name: Format check
+        run: ruff format --check modules/
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install pyright
+          pip install -e modules/tool-bitcoin-rpc
+          pip install -e modules/tool-lnd
+          pip install -e modules/tool-aggeus-markets
+      - name: Typecheck
+        run: pyright modules/
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module:
+          - tool-bitcoin-rpc
+          - tool-lnd
+          - tool-aggeus-markets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install module
+        run: pip install -e "modules/${{ matrix.module }}[test]"
+      - name: Run tests
+        run: python -m pytest modules/${{ matrix.module }}/tests/ -v
