@@ -189,3 +189,21 @@ async def test_rpc_logs_request(caplog):
         await client.rpc("getblockcount")
     assert "getblockcount" in caplog.text
     await client.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rpc_does_not_log_param_values(caplog):
+    """rpc() must NOT log raw param values (defense in depth for sensitive args)."""
+    import logging
+
+    from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
+
+    respx.post(RPC_URL).mock(return_value=rpc_success("ok"))
+    client = BitcoinRpcClient(url=RPC_URL, user="u", password="p")
+    secret = "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ"
+    with caplog.at_level(logging.DEBUG):
+        await client.rpc("importprivkey", params=[secret])
+    assert "importprivkey" in caplog.text
+    assert secret not in caplog.text
+    await client.close()

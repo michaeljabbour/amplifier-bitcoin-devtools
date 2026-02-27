@@ -56,7 +56,9 @@ class BitcoinRpcClient:
             "params": params if params is not None else [],
         }
 
-        logger.debug("RPC request: %s params=%s wallet=%r", method, params, wallet)
+        logger.debug(
+            "RPC request: %s params=%d wallet=%r", method, len(params or []), wallet
+        )
 
         client = self._ensure_client()
         response = await client.post(url, json=payload)
