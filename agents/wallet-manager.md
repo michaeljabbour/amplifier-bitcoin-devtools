@@ -283,3 +283,7 @@ For every operation, always return:
 
 Never silently swallow errors. If a tool returns `success: false`, report the
 error message verbatim and suggest what to try next.
+
+---
+
+@foundation:context/shared/common-agent-base.md

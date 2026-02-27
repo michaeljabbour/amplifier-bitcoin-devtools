@@ -88,3 +88,7 @@ connects automatically -- no credentials are required from the user.
 - **Payments:** amount + routing fee + preimage on success; error on failure
 - **Lookups:** status + amount + settlement details if paid
 - **Errors:** exact LND error message verbatim
+
+---
+
+@foundation:context/shared/common-agent-base.md

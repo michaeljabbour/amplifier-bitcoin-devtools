@@ -114,3 +114,7 @@ Always rephrase as a clear yes/no question:
 - **Shares:** table with side, confidence, deposit, buyer cost
 - **Creation:** market_id + event_id + both preimages + preimage warning
 - **Errors:** exact relay error verbatim
+
+---
+
+@foundation:context/shared/common-agent-base.md
