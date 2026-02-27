@@ -289,8 +289,10 @@ Use aggeus_list_markets to find a market_id first."""
             deposit = int(share.get("deposit", 0))
             buyer_cost = (100 - confidence) * 100
             outpoint = share.get("funding_outpoint", "?")
+            _ellip = "\u2026"
+            short_id = _shorten(share_id, head=10, tail=0).rstrip(_ellip)
             lines.append(
-                f"| {_shorten(share_id, head=10, tail=0).rstrip('\u2026')}\u2026 "
+                f"| {short_id}\u2026 "
                 f"| {side} "
                 f"| {confidence}% "
                 f"| {deposit:,} sats "

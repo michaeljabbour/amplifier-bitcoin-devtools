@@ -16,7 +16,7 @@ import pathlib
 
 import pytest
 
-from conftest import override_env
+from .conftest import override_env
 
 INIT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
     "amplifier_module_tool_aggeus_markets/__init__.py"

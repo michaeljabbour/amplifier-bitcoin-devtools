@@ -15,7 +15,7 @@ import pathlib
 
 import pytest
 
-from conftest import make_async_raise, make_async_return
+from .conftest import make_async_raise, make_async_return
 
 TOOLS_SRC = pathlib.Path(__file__).resolve().parents[1] / (
     "amplifier_module_tool_aggeus_markets/tools.py"

@@ -1,10 +1,19 @@
-"""Provide a minimal amplifier_core stub and coincurve stub for testing."""
+"""Provide a minimal amplifier_core stub and shared fixtures for testing."""
 
 import hashlib
+import json
 import os
 import sys
 import types
 from contextlib import contextmanager
+from unittest.mock import AsyncMock
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Stub installation -- prefer real libraries, fall back to stubs
+# ---------------------------------------------------------------------------
 
 
 def _install_amplifier_core_stub() -> None:
@@ -29,13 +38,15 @@ def _install_amplifier_core_stub() -> None:
 
 
 def _install_coincurve_stub() -> None:
-    """Provide a deterministic coincurve stub for testing crypto functions.
-
-    The stub produces predictable outputs based on inputs so tests can
-    assert on exact values without needing the real C library.
-    """
+    """Provide a deterministic coincurve stub only if the real library is unavailable."""
     if "coincurve" in sys.modules:
         return
+    try:
+        import coincurve  # noqa: F401
+
+        return  # real library available
+    except ImportError:
+        pass
 
     mod = types.ModuleType("coincurve")
 
@@ -44,8 +55,6 @@ def _install_coincurve_stub() -> None:
             self._data = data
 
         def format(self, compressed: bool = True) -> bytes:
-            # Return a deterministic 33-byte compressed pubkey:
-            # prefix byte 0x02 + SHA256(privkey_bytes) truncated to 32 bytes
             h = hashlib.sha256(self._data).digest()
             return b"\x02" + h
 
@@ -58,7 +67,6 @@ def _install_coincurve_stub() -> None:
             return _FakePublicKey(self._secret)
 
         def sign_schnorr(self, msg: bytes) -> bytes:
-            # Deterministic fake signature: SHA256(secret + msg), doubled to 64 bytes
             h = hashlib.sha256(self._secret + msg).digest()
             return h + h  # 64 bytes like a real Schnorr sig
 
@@ -67,9 +75,16 @@ def _install_coincurve_stub() -> None:
 
 
 def _install_websockets_stub() -> None:
-    """Provide a minimal websockets stub so client.py can be imported."""
+    """Provide a minimal websockets stub only if the real library is unavailable."""
     if "websockets" in sys.modules:
         return
+    try:
+        import websockets  # noqa: F401
+
+        return
+    except ImportError:
+        pass
+
     mod = types.ModuleType("websockets")
 
     async def connect(*args, **kwargs):
@@ -133,3 +148,67 @@ def override_env(**env_vars):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = original
+
+
+# ---------------------------------------------------------------------------
+# Pytest fixtures
+# ---------------------------------------------------------------------------
+
+# BIP-340 test vector: secret key 1
+SK1_HEX = "00" * 31 + "01"
+SK1_PUBKEY = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+
+
+@pytest.fixture
+def mock_nostr_client():
+    """NostrClient with query_relay and publish_event mocked."""
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
+
+    client = NostrClient("ws://localhost:8080", None, None)
+    client.query_relay = AsyncMock(return_value=[])
+    client.publish_event = AsyncMock(return_value="accepted")
+    return client
+
+
+@pytest.fixture
+def signing_client():
+    """NostrClient with BIP-340 test vector secret key 1 and mocked relay methods."""
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
+
+    client = NostrClient("ws://localhost:8080", SK1_HEX, "cc" * 32)
+    client.query_relay = AsyncMock(return_value=[])
+    client.publish_event = AsyncMock(return_value="accepted")
+    return client
+
+
+def make_market_event(
+    name="Test Market",
+    market_id="mkt_test_123",
+    oracle="oracle_pk",
+    coordinator="coord_pk",
+    resolution_block=900000,
+):
+    """Build a synthetic kind-46416 market event."""
+    data = [
+        1,  # version
+        name,
+        market_id,
+        oracle,
+        coordinator,
+        resolution_block,
+        "yes_hash_abc",
+        "no_hash_def",
+        ["ws://relay.test"],
+    ]
+    return {
+        "id": f"event_{market_id}",
+        "pubkey": oracle,
+        "created_at": 1700000000,
+        "kind": 46416,
+        "tags": [
+            ["p", oracle],
+            ["t", "market_definition"],
+            ["d", market_id],
+        ],
+        "content": json.dumps(data),
+    }
