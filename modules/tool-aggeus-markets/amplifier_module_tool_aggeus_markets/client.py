@@ -238,9 +238,11 @@ class NostrClient:
         content: str,
     ) -> dict:
         """Build and sign a complete Nostr event dict."""
-        assert self._oracle_privkey is not None, "No signing key configured"
+        if self._oracle_privkey is None:
+            raise RuntimeError("No signing key configured")
         pubkey = self._oracle_pubkey
-        assert pubkey is not None
+        if pubkey is None:
+            raise RuntimeError("No oracle pubkey derived")
         created_at = int(time.time())
         event_id = _nostr_event_id(pubkey, created_at, kind, tags, content)
         sig = _schnorr_sign(self._oracle_privkey, event_id)

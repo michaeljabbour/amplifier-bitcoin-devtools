@@ -306,6 +306,24 @@ def test_shorten_short_string():
 # ---------------------------------------------------------------------------
 
 
+def test_build_signed_event_without_signing_key_raises_runtime_error():
+    """build_signed_event must raise RuntimeError (not AssertionError) without signing key.
+
+    assert statements are stripped by python -O, so security-sensitive
+    precondition checks must use proper exceptions.
+    """
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
+    import pytest
+
+    client = NostrClient("ws://localhost:8080", None, "bb" * 32)
+    with pytest.raises(RuntimeError, match="No signing key configured"):
+        client.build_signed_event(
+            kind=46416,
+            tags=[["t", "market_definition"]],
+            content="test",
+        )
+
+
 def test_build_signed_event():
     """NostrClient.build_signed_event must produce a complete signed event dict."""
     from amplifier_module_tool_aggeus_markets.client import NostrClient
