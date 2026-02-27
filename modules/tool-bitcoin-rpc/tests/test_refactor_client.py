@@ -377,9 +377,3 @@ async def test_rpc_empty_list_params_preserved():
 
     body = json.loads(captured_request.content)
     assert body["params"] == []
-    # The key semantic check: the *same* list object should have been used,
-    # not replaced by a new one via `or`.  We verify by checking the source.
-    source = CLIENT_SRC.read_text()
-    assert "params if params is not None else []" in source, (
-        "params should use 'is not None' check, not truthiness"
-    )

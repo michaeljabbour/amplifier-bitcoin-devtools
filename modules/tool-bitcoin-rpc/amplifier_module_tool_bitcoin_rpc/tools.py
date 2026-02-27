@@ -738,6 +738,7 @@ first reward immediately spendable."""
         except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
             return _rpc_error_result(e)
 
+        # Assumes pre-halving coinbase reward (50 BTC). Regtest-only; informational.
         reward_sats = num_blocks * 5_000_000_000
         lines = [
             f"Mined {num_blocks} block(s) \u2192 {address}",
