@@ -186,8 +186,8 @@ class NostrClient:
 
                 try:
                     await ws.send(json.dumps(["CLOSE", sub_id]))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed to send CLOSE: %s", exc)
 
         except OSError as exc:
             raise ConnectionError(

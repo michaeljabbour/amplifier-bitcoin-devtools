@@ -13,6 +13,9 @@ import ast
 import hashlib
 import json
 import pathlib
+from contextlib import asynccontextmanager
+
+import pytest
 
 
 CLIENT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
@@ -322,6 +325,50 @@ def test_build_signed_event_without_signing_key_raises_runtime_error():
             tags=[["t", "market_definition"]],
             content="test",
         )
+
+
+@pytest.mark.asyncio
+async def test_query_relay_logs_close_failure(caplog):
+    """When sending CLOSE to relay fails, failure must be logged at DEBUG level."""
+    import logging
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
+
+    # Build a fake websocket that:
+    # 1. Returns EOSE on recv() so query completes
+    # 2. Raises on the second send() (the CLOSE message)
+    fake_ws = AsyncMock()
+    call_count = 0
+
+    async def mock_send(msg):
+        nonlocal call_count
+        call_count += 1
+        if call_count > 1:  # Second send = CLOSE
+            raise OSError("connection reset")
+
+    sub_id = "aabbccddeeff"  # 12-char hex, matches uuid4().hex[:12]
+
+    fake_ws.send = mock_send
+    fake_ws.recv = AsyncMock(return_value=json.dumps(["EOSE", sub_id]))
+
+    # Patch uuid to control sub_id so EOSE matches
+    with patch("amplifier_module_tool_aggeus_markets.client.uuid") as mock_uuid:
+        mock_uuid.uuid4.return_value = MagicMock(hex=sub_id + "0" * 20)
+
+        @asynccontextmanager
+        async def fake_connect(*args, **kwargs):
+            yield fake_ws
+
+        with patch(
+            "amplifier_module_tool_aggeus_markets.client.websockets.connect",
+            fake_connect,
+        ):
+            client = NostrClient("ws://localhost:8080", None, None)
+            with caplog.at_level(logging.DEBUG):
+                await client.query_relay({"kinds": [1]})
+
+    assert "Failed to send CLOSE" in caplog.text
 
 
 def test_build_signed_event():

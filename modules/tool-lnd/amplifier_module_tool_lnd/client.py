@@ -59,7 +59,11 @@ class LndClient:
         if timeout is not None:
             kwargs["timeout"] = timeout
         response = await client.get(path, **kwargs)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            logger.error("LND error: GET %s -> %d", path, response.status_code)
+            raise
 
         logger.debug("LND response: %s %d", path, response.status_code)
 
@@ -86,7 +90,11 @@ class LndClient:
         if timeout is not None:
             kwargs["timeout"] = timeout
         response = await client.post(path, **kwargs)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            logger.error("LND error: POST %s -> %d", path, response.status_code)
+            raise
 
         logger.debug("LND response: %s %d", path, response.status_code)
 

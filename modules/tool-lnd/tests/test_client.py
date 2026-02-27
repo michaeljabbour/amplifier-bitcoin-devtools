@@ -143,3 +143,48 @@ def test_lnd_error_falls_back_to_raw_text():
     """lnd_error falls back to response.text for non-JSON responses."""
     response = httpx.Response(500, text="Internal Server Error")
     assert lnd_error(response) == "Internal Server Error"
+
+
+# ---------------------------------------------------------------------------
+# Logging tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_logs_error_on_http_failure(caplog):
+    """GET that returns 500 must log at ERROR level before raising."""
+    import logging
+
+    respx.get(f"{BASE_URL}/v1/getinfo").mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.get("/v1/getinfo")
+    assert "LND error" in caplog.text
+    assert "/v1/getinfo" in caplog.text
+    assert "500" in caplog.text
+    await client.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_post_logs_error_on_http_failure(caplog):
+    """POST that returns 403 must log at ERROR level before raising."""
+    import logging
+
+    respx.post(f"{BASE_URL}/v1/invoices").mock(
+        return_value=httpx.Response(403, text="forbidden")
+    )
+
+    client = make_test_client(LndClient(BASE_URL, TLS_CERT, MACAROON_HEX))
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.post("/v1/invoices", json={"value": 1000})
+    assert "LND error" in caplog.text
+    assert "/v1/invoices" in caplog.text
+    assert "403" in caplog.text
+    await client.close()
