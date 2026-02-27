@@ -392,3 +392,54 @@ async def test_create_market_connection_error():
 
     assert result.success is False
     assert "relay down" in result.error["message"]
+
+
+@pytest.mark.asyncio
+async def test_create_market_negative_resolution_block():
+    """CreateMarketTool must reject negative resolution_block."""
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
+    from amplifier_module_tool_aggeus_markets.tools import CreateMarketTool
+
+    client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
+    tool = CreateMarketTool(client)
+    result = await tool.execute({"question": "Test?", "resolution_block": -1})
+
+    assert result.success is False
+    assert "positive" in result.error["message"]
+
+
+@pytest.mark.asyncio
+async def test_create_market_zero_resolution_block():
+    """CreateMarketTool must reject zero resolution_block."""
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
+    from amplifier_module_tool_aggeus_markets.tools import CreateMarketTool
+
+    client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
+    tool = CreateMarketTool(client)
+    result = await tool.execute({"question": "Test?", "resolution_block": 0})
+
+    assert result.success is False
+    assert "positive" in result.error["message"]
+
+
+@pytest.mark.asyncio
+async def test_list_shares_events_exist_but_none_parseable():
+    """ListSharesTool must handle events that exist but can't be parsed as shares."""
+    from amplifier_module_tool_aggeus_markets.client import NostrClient
+    from amplifier_module_tool_aggeus_markets.tools import ListSharesTool
+
+    # Events with invalid JSON content that won't parse
+    events = [
+        {"id": "e1", "content": "not valid json", "created_at": 0, "pubkey": "pk"},
+        {"id": "e2", "content": "{malformed", "created_at": 0, "pubkey": "pk"},
+    ]
+
+    client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
+    client.query_relay = make_async_return(events)
+
+    tool = ListSharesTool(client)
+    result = await tool.execute({"market_id": "mkt123"})
+
+    assert result.success is True
+    assert "2 event(s)" in result.output
+    assert "none could be parsed" in result.output
