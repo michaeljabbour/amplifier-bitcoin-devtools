@@ -37,6 +37,9 @@ def make_test_client(lnd_client):
     tries to load a real certificate file. We inject a client with verify=False
     but keep the same base_url and headers to test real behavior.
     """
+    # verify=False is intentional: real _ensure_client() uses verify=tls_cert
+    # which requires an actual certificate file. Tests use respx mocking so
+    # TLS verification is unnecessary and would cause spurious failures.
     lnd_client._client = httpx.AsyncClient(
         base_url=lnd_client._base_url,
         verify=False,

@@ -12,6 +12,7 @@ Verifies:
 import asyncio
 import ast
 import inspect
+import os
 import pathlib
 import tempfile
 
@@ -94,8 +95,6 @@ def test_no_tool_classes_in_init():
 @pytest.mark.asyncio
 async def test_mount_returns_cleanup_function():
     """mount() must return a cleanup callable."""
-    import os
-
     from amplifier_module_tool_lnd import mount
 
     class MockCoordinator:
@@ -173,8 +172,6 @@ async def test_mount_returns_cleanup_function():
 @pytest.mark.asyncio
 async def test_mount_raises_without_tls_cert():
     """mount() must raise ValueError when tls_cert is not provided."""
-    import os
-
     from amplifier_module_tool_lnd import mount
 
     class MockCoordinator:
@@ -198,9 +195,6 @@ async def test_mount_raises_without_tls_cert():
 @pytest.mark.asyncio
 async def test_mount_raises_without_macaroon():
     """mount() must raise ValueError when macaroon_path is not provided."""
-    import os
-    import tempfile
-
     from amplifier_module_tool_lnd import mount
 
     class MockCoordinator:
