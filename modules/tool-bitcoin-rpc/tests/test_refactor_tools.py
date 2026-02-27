@@ -331,3 +331,32 @@ async def test_manage_wallet_list():
 
     assert result.success
     assert "wallet1" in result.output
+
+
+@pytest.mark.asyncio
+async def test_manage_wallet_unknown_action_returns_error():
+    """ManageWalletTool must return an error ToolResult for unknown actions.
+
+    Even though schema validation makes this unreachable in practice,
+    defensive coding requires an explicit error rather than implicit None.
+    """
+    from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
+    from amplifier_module_tool_bitcoin_rpc.tools import ManageWalletTool
+
+    client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
+    tool = ManageWalletTool(client)
+    # Bypass schema validation — call execute directly with an invalid action
+    result = await tool.execute({"action": "invalid_action", "wallet": "test"})
+    await client.close()
+
+    assert result is not None, "execute() must not return None for unknown actions"
+    assert not result.success
+    assert "Unknown action" in result.error["message"]
+
+
+def test_tools_use_error_helper():
+    """tools.py should use a shared _rpc_error_result helper to reduce boilerplate."""
+    source = TOOLS_SRC.read_text()
+    assert "_rpc_error_result" in source, (
+        "tools.py should define a _rpc_error_result helper to reduce error-handling boilerplate"
+    )

@@ -341,3 +341,45 @@ def test_load_credentials_valid_cookie():
         assert password == "abc123secret"
     finally:
         p.unlink()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rpc_empty_list_params_preserved():
+    """rpc() with params=[] must send [] (not replace with a new []).
+
+    Ensures the `params` handling uses identity check (`is None`) rather than
+    truthiness, so an intentional empty list is not silently replaced.
+    """
+    from amplifier_module_tool_bitcoin_rpc.client import BitcoinRpcClient
+
+    captured_request = None
+
+    def capture(request):
+        nonlocal captured_request
+        captured_request = request
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "1.0",
+                "id": "amplifier_test",
+                "result": None,
+                "error": None,
+            },
+        )
+
+    respx.post(RPC_URL).mock(side_effect=capture)
+
+    client = BitcoinRpcClient(RPC_URL, RPC_USER, RPC_PASS)
+    explicit_empty: list = []
+    await client.rpc("test", params=explicit_empty)
+    await client.close()
+
+    body = json.loads(captured_request.content)
+    assert body["params"] == []
+    # The key semantic check: the *same* list object should have been used,
+    # not replaced by a new one via `or`.  We verify by checking the source.
+    source = CLIENT_SRC.read_text()
+    assert "params if params is not None else []" in source, (
+        "params should use 'is not None' check, not truthiness"
+    )

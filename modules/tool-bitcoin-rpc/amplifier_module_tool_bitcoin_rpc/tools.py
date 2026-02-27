@@ -12,6 +12,29 @@ from amplifier_core import ToolResult
 from .client import BitcoinRpcClient
 
 
+def _rpc_error_result(exc: Exception) -> ToolResult:
+    """Convert an RPC-related exception into a structured ToolResult error.
+
+    Handles the three exception types raised by BitcoinRpcClient.rpc():
+    - httpx.HTTPStatusError  → HTTP-level failure (401, 500, etc.)
+    - httpx.RequestError     → connection/network failure
+    - RuntimeError           → JSON-RPC-level error from the node
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        resp = exc.response
+        return ToolResult(
+            success=False,
+            error={"message": f"RPC HTTP error {resp.status_code}: {resp.text}"},
+        )
+    if isinstance(exc, httpx.RequestError):
+        return ToolResult(
+            success=False,
+            error={"message": f"Could not reach Bitcoin node: {exc}"},
+        )
+    # RuntimeError (JSON-RPC error) or unexpected
+    return ToolResult(success=False, error={"message": str(exc)})
+
+
 class ListUtxosTool:
     """List UTXOs from a Bitcoin Core wallet via RPC."""
 
@@ -62,20 +85,8 @@ or consolidations."""
             utxos = await self._client.rpc(
                 "listunspent", params=[min_conf], wallet=wallet
             )
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"RPC HTTP error {e.response.status_code}: {e.response.text}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach Bitcoin node: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
         if not utxos:
             label = f"wallet '{wallet}'" if wallet else "default wallet"
@@ -343,20 +354,13 @@ The `wallet` parameter is required for every action except `list`."""
                 await self._client.rpc("unloadwallet", params=[wallet])
                 return ToolResult(success=True, output=f"Unloaded wallet '{wallet}'.")
 
-        except httpx.HTTPStatusError as e:
             return ToolResult(
                 success=False,
-                error={
-                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
-                },
+                error={"message": f"Unknown action '{action}'."},
             )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach Bitcoin node: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
 
 class GenerateAddressTool:
@@ -415,20 +419,8 @@ Address types:
             address = await self._client.rpc(
                 "getnewaddress", params=params, wallet=wallet
             )
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach Bitcoin node: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
         parts = [f"Address: {address}"]
         if label:
@@ -511,20 +503,8 @@ rather than on top."""
                 params=[address, btc_amount, comment, "", subtract_fee],
                 wallet=wallet,
             )
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach Bitcoin node: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
         lines = [
             f"Sent {amount_sats:,} sats to {address}",
@@ -695,20 +675,8 @@ UTXOs. Omit it to consolidate everything eligible in the wallet."""
 
             return ToolResult(success=True, output="\n".join(lines))
 
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach Bitcoin node: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
 
 class MineBlocksTool:
@@ -767,20 +735,8 @@ first reward immediately spendable."""
             block_hashes = await self._client.rpc(
                 "generatetoaddress", params=[num_blocks, address]
             )
-        except httpx.HTTPStatusError as e:
-            return ToolResult(
-                success=False,
-                error={
-                    "message": f"HTTP error {e.response.status_code}: {e.response.text}"
-                },
-            )
-        except httpx.RequestError as e:
-            return ToolResult(
-                success=False,
-                error={"message": f"Could not reach Bitcoin node: {e}"},
-            )
-        except RuntimeError as e:
-            return ToolResult(success=False, error={"message": str(e)})
+        except (httpx.HTTPStatusError, httpx.RequestError, RuntimeError) as e:
+            return _rpc_error_result(e)
 
         reward_sats = num_blocks * 5_000_000_000
         lines = [

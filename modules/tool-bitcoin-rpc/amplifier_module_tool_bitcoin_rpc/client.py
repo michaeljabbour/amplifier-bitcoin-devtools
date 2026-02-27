@@ -50,7 +50,7 @@ class BitcoinRpcClient:
             "jsonrpc": "1.0",
             "id": f"amplifier_{method}",
             "method": method,
-            "params": params or [],
+            "params": params if params is not None else [],
         }
 
         client = self._ensure_client()
