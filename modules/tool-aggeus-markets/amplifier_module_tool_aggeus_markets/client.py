@@ -229,8 +229,6 @@ class NostrClient:
                 f"Cannot connect to relay {self._relay_url}: {exc}"
             ) from exc
 
-        return "no response"
-
     def build_signed_event(
         self,
         kind: int,

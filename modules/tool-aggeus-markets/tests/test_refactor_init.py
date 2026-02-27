@@ -12,10 +12,11 @@ Verifies:
 import asyncio
 import ast
 import inspect
-import os
 import pathlib
 
 import pytest
+
+from conftest import override_env
 
 INIT_SRC = pathlib.Path(__file__).resolve().parents[1] / (
     "amplifier_module_tool_aggeus_markets/__init__.py"
@@ -106,18 +107,11 @@ async def test_mount_returns_cleanup_function():
 
     coordinator = MockCoordinator()
 
-    # Set env for full config (with signing)
-    old_env = {}
-    env_vars = {
-        "AGGEUS_RELAY_URL": "ws://localhost:8080",
-        "AGGEUS_ORACLE_PRIVKEY": "aa" * 32,
-        "AGGEUS_COORDINATOR_PUBKEY": "bb" * 32,
-    }
-    for k, v in env_vars.items():
-        old_env[k] = os.environ.get(k)
-        os.environ[k] = v
-
-    try:
+    with override_env(
+        AGGEUS_RELAY_URL="ws://localhost:8080",
+        AGGEUS_ORACLE_PRIVKEY="aa" * 32,
+        AGGEUS_COORDINATOR_PUBKEY="bb" * 32,
+    ):
         cleanup = await mount(coordinator, {})
 
         # Must return a callable cleanup function
@@ -131,12 +125,6 @@ async def test_mount_returns_cleanup_function():
             result = cleanup()
             if asyncio.iscoroutine(result):
                 await result
-    finally:
-        for k, v in old_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
 
 
 @pytest.mark.asyncio
@@ -146,17 +134,11 @@ async def test_mount_with_signing_mounts_4_tools():
 
     coordinator = MockCoordinator()
 
-    old_env = {}
-    env_vars = {
-        "AGGEUS_RELAY_URL": "ws://localhost:8080",
-        "AGGEUS_ORACLE_PRIVKEY": "aa" * 32,
-        "AGGEUS_COORDINATOR_PUBKEY": "bb" * 32,
-    }
-    for k, v in env_vars.items():
-        old_env[k] = os.environ.get(k)
-        os.environ[k] = v
-
-    try:
+    with override_env(
+        AGGEUS_RELAY_URL="ws://localhost:8080",
+        AGGEUS_ORACLE_PRIVKEY="aa" * 32,
+        AGGEUS_COORDINATOR_PUBKEY="bb" * 32,
+    ):
         await mount(coordinator, {})
 
         assert len(coordinator.mounted) == 4
@@ -166,12 +148,6 @@ async def test_mount_with_signing_mounts_4_tools():
         assert "aggeus_get_market" in mounted_names
         assert "aggeus_list_shares" in mounted_names
         assert all(kind == "tools" for kind, _ in coordinator.mounted)
-    finally:
-        for k, v in old_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
 
 
 @pytest.mark.asyncio
@@ -181,18 +157,11 @@ async def test_mount_without_signing_mounts_3_tools():
 
     coordinator = MockCoordinator()
 
-    # Clear signing env vars
-    old_env = {}
-    env_clear = ["AGGEUS_ORACLE_PRIVKEY", "AGGEUS_COORDINATOR_PUBKEY"]
-    env_set = {"AGGEUS_RELAY_URL": "ws://localhost:8080"}
-
-    for k in env_clear:
-        old_env[k] = os.environ.pop(k, None)
-    for k, v in env_set.items():
-        old_env[k] = os.environ.get(k)
-        os.environ[k] = v
-
-    try:
+    with override_env(
+        AGGEUS_RELAY_URL="ws://localhost:8080",
+        AGGEUS_ORACLE_PRIVKEY=None,
+        AGGEUS_COORDINATOR_PUBKEY=None,
+    ):
         await mount(coordinator, {})
 
         assert len(coordinator.mounted) == 3
@@ -201,12 +170,6 @@ async def test_mount_without_signing_mounts_3_tools():
         assert "aggeus_list_markets" in mounted_names
         assert "aggeus_get_market" in mounted_names
         assert "aggeus_list_shares" in mounted_names
-    finally:
-        for k, v in old_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
 
 
 @pytest.mark.asyncio
@@ -216,25 +179,13 @@ async def test_mount_constructs_relay_url_from_host_port():
 
     coordinator = MockCoordinator()
 
-    old_env = {}
-    # Clear relay_url, set host+port
-    for k in ["AGGEUS_RELAY_URL", "AGGEUS_ORACLE_PRIVKEY", "AGGEUS_COORDINATOR_PUBKEY"]:
-        old_env[k] = os.environ.pop(k, None)
-    env_set = {
-        "AGGEUS_RELAY_HOST": "myhost",
-        "AGGEUS_RELAY_PORT": "9999",
-    }
-    for k, v in env_set.items():
-        old_env[k] = os.environ.get(k)
-        os.environ[k] = v
-
-    try:
+    with override_env(
+        AGGEUS_RELAY_URL=None,
+        AGGEUS_ORACLE_PRIVKEY=None,
+        AGGEUS_COORDINATOR_PUBKEY=None,
+        AGGEUS_RELAY_HOST="myhost",
+        AGGEUS_RELAY_PORT="9999",
+    ):
         await mount(coordinator, {})
         # Should mount 3 tools (no signing) - verifies it didn't crash
         assert len(coordinator.mounted) == 3
-    finally:
-        for k, v in old_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v

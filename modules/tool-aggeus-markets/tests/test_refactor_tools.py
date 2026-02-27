@@ -15,6 +15,8 @@ import pathlib
 
 import pytest
 
+from conftest import make_async_raise, make_async_return
+
 TOOLS_SRC = pathlib.Path(__file__).resolve().parents[1] / (
     "amplifier_module_tool_aggeus_markets/tools.py"
 )
@@ -103,7 +105,7 @@ async def test_list_markets_no_results():
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
     # Patch query_relay to return empty list
-    client.query_relay = _make_async_return([])
+    client.query_relay = make_async_return([])
 
     tool = ListMarketsTool(client)
     result = await tool.execute({"limit": 50})
@@ -134,7 +136,7 @@ async def test_list_markets_with_results():
     ]
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
-    client.query_relay = _make_async_return(events)
+    client.query_relay = make_async_return(events)
 
     tool = ListMarketsTool(client)
     result = await tool.execute({})
@@ -151,7 +153,7 @@ async def test_list_markets_connection_error():
     from amplifier_module_tool_aggeus_markets.tools import ListMarketsTool
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
-    client.query_relay = _make_async_raise(ConnectionError("relay down"))
+    client.query_relay = make_async_raise(ConnectionError("relay down"))
 
     tool = ListMarketsTool(client)
     result = await tool.execute({})
@@ -167,7 +169,7 @@ async def test_list_markets_generic_exception():
     from amplifier_module_tool_aggeus_markets.tools import ListMarketsTool
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
-    client.query_relay = _make_async_raise(RuntimeError("unexpected"))
+    client.query_relay = make_async_raise(RuntimeError("unexpected"))
 
     tool = ListMarketsTool(client)
     result = await tool.execute({})
@@ -202,7 +204,7 @@ async def test_get_market_not_found():
     from amplifier_module_tool_aggeus_markets.tools import GetMarketTool
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
-    client.query_relay = _make_async_return([])
+    client.query_relay = make_async_return([])
 
     tool = GetMarketTool(client)
     result = await tool.execute({"market_id": "abc123"})
@@ -238,7 +240,7 @@ async def test_get_market_success():
     ]
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
-    client.query_relay = _make_async_return(events)
+    client.query_relay = make_async_return(events)
 
     tool = GetMarketTool(client)
     result = await tool.execute({"market_id": "mkt_id"})
@@ -291,7 +293,7 @@ async def test_list_shares_buyer_cost():
     ]
 
     client = NostrClient("ws://localhost:8080", "aa" * 32, "bb" * 32)
-    client.query_relay = _make_async_return(events)
+    client.query_relay = make_async_return(events)
 
     tool = ListSharesTool(client)
     result = await tool.execute({"market_id": "mkt123"})
@@ -349,7 +351,7 @@ async def test_create_market_success():
     client.build_signed_event = _fake_build
 
     # Patch publish_event to return "accepted"
-    client.publish_event = _make_async_return("accepted")
+    client.publish_event = make_async_return("accepted")
 
     tool = CreateMarketTool(client)
     result = await tool.execute(
@@ -378,7 +380,7 @@ async def test_create_market_connection_error():
         return {"id": "fake_event_id", "kind": kind, "tags": tags, "content": content}
 
     client.build_signed_event = _fake_build
-    client.publish_event = _make_async_raise(ConnectionError("relay down"))
+    client.publish_event = make_async_raise(ConnectionError("relay down"))
 
     tool = CreateMarketTool(client)
     result = await tool.execute(
@@ -390,26 +392,3 @@ async def test_create_market_connection_error():
 
     assert result.success is False
     assert "relay down" in result.error["message"]
-
-
-# ---------------------------------------------------------------------------
-# Test helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_async_return(value):
-    """Create an async function that returns the given value."""
-
-    async def _fn(*args, **kwargs):
-        return value
-
-    return _fn
-
-
-def _make_async_raise(exc):
-    """Create an async function that raises the given exception."""
-
-    async def _fn(*args, **kwargs):
-        raise exc
-
-    return _fn

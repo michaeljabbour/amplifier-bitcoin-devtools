@@ -1,8 +1,10 @@
 """Provide a minimal amplifier_core stub and coincurve stub for testing."""
 
 import hashlib
+import os
 import sys
 import types
+from contextlib import contextmanager
 
 
 def _install_amplifier_core_stub() -> None:
@@ -80,3 +82,54 @@ def _install_websockets_stub() -> None:
 _install_amplifier_core_stub()
 _install_coincurve_stub()
 _install_websockets_stub()
+
+
+# ---------------------------------------------------------------------------
+# Shared async test helpers
+# ---------------------------------------------------------------------------
+
+
+def make_async_return(value):
+    """Create an async function that returns the given value."""
+
+    async def _fn(*args, **kwargs):
+        return value
+
+    return _fn
+
+
+def make_async_raise(exc):
+    """Create an async function that raises the given exception."""
+
+    async def _fn(*args, **kwargs):
+        raise exc
+
+    return _fn
+
+
+# ---------------------------------------------------------------------------
+# Environment variable helpers
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def override_env(**env_vars):
+    """Temporarily set/unset environment variables, restoring originals on exit.
+
+    Pass a value of ``None`` to unset a variable for the duration of the block.
+    """
+    saved: dict[str, str | None] = {}
+    try:
+        for key, value in env_vars.items():
+            saved[key] = os.environ.get(key)
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        yield
+    finally:
+        for key, original in saved.items():
+            if original is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = original
