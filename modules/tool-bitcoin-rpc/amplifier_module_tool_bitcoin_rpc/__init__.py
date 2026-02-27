@@ -982,7 +982,18 @@ def _load_credentials(config: dict) -> tuple[str, str]:
     """Resolve RPC credentials from cookie file or explicit env vars."""
     cookie_file = config.get("cookie_file") or os.environ.get("BITCOIN_COOKIE_FILE")
     if cookie_file:
-        content = open(cookie_file).read().strip()
+        try:
+            with open(cookie_file) as f:
+                content = f.read().strip()
+        except FileNotFoundError:
+            raise ValueError(
+                f"Cookie file not found at {cookie_file} -- check BITCOIN_COOKIE_FILE"
+            )
+        except PermissionError:
+            raise ValueError(
+                f"Permission denied reading cookie file at {cookie_file}"
+                " -- check file permissions"
+            )
         user, password = content.split(":", 1)
         return user, password
     return (
