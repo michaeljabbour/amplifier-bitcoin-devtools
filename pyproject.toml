@@ -15,6 +15,7 @@ reportMissingImports = "warning"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "--import-mode=importlib"
 # Root-level tests only (docs, CI, dependency hygiene).
 # Module tests must be run per-module (each requires `pip install -e`)
 # and CI handles this via its matrix strategy.
